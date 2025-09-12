@@ -7,4 +7,4 @@ st.markdown("Vælg en side i menuen til venstre for at starte.")
 
 # Valgfrit: knap der hopper til en anden side (kræver nyere Streamlit)
 if st.button("Gå til fletning"):
-    st.switch_page("pages/1_Merge.py")
+    st.switch_page("pages/Merger.py")
