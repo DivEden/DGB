@@ -1,10 +1,16 @@
 # Home.py
 import streamlit as st
+import time
 
-st.set_page_config(page_title="CSV Title Merger", page_icon="📄")
-st.title("📄 CSV Title Merger")
-st.markdown("Vælg en side i menuen til venstre for at starte.")
+st.set_page_config(page_title="DGB Hjemmeside", page_icon="🐟")
 
-# Valgfrit: knap der hopper til en anden side (kræver nyere Streamlit)
-if st.button("Gå til fletning"):
-    st.switch_page("pages/Merger.py")
+st.title("DGB")
+st.write("Nu er siden klar 🐟")
+
+if "ready" not in st.session_state:
+    st.image("Fish.gif", use_container_width=False)
+    with st.spinner("Starter app..."):
+        time.sleep(3)  # tung opgave
+    st.session_state.ready = True
+    st.experimental_rerun()
+
