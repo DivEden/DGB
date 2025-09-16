@@ -1,5 +1,5 @@
-# Home.py
 import streamlit as st
+import time
 
 st.set_page_config(
     page_title="DGB Hjemmeside",
@@ -7,13 +7,21 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- Custom CSS ---
+if "ready" not in st.session_state:
+    st.image("app/Fish.gif", use_container_width=False)
+    with st.spinner("Starter app..."):
+        time.sleep(3)  # tung opgave
+    st.session_state.ready = True
+    st.rerun()
+    st.stop()  # Stopper resten af koden fra at køre
+    
+# --- CSS pynt ---
 st.markdown(
     """
     <style>
     /* Centrer alt indhold */
     .block-container {
-        padding-top: 2rem;True
+        padding-top: 2rem;
         padding-bottom: 2rem;
         text-align: center;
     }
@@ -44,7 +52,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Page content ---
+# --- Mere CSS ---
 st.title("🐟 DGB")
 
 st.write("")
@@ -63,12 +71,6 @@ with col3:
         st.write("yap yap")
 
 st.write("---")
-st.caption("© 2025 DGB – lavet med Streamlit 🐟")
+st.caption("© 2025 DGB - Alle rettigheder forbeholdes.")
 
-if "ready" not in st.session_state:
-    st.image("Fish.gif", use_container_width=False)
-    with st.spinner("Starter app..."):
-        time.sleep(3)  # tung opgave
-    st.session_state.ready = True
-    st.experimental_rerun()
 
