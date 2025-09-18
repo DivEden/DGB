@@ -1,36 +1,80 @@
 # pip install streamlit transformers torch pillow sentencepiece
 
-import io
-import streamlit as st
+from pathlib import Path
 from PIL import Image
-from transformers import BlipProcessor, BlipForConditionalGeneration
-import torch
+import streamlit as st
 
-@st.cache_resource(show_spinner=False)
-def load_blip():
-    model_name = "Salesforce/blip-image-captioning-large"  # eller "...-base" for mindre model
-    processor = BlipProcessor.from_pretrained(model_name)
-    model = BlipForConditionalGeneration.from_pretrained(
-        model_name,
-        torch_dtype=torch.float32
-    )
-    return processor, model
+st.set_page_config(
+    page_title="TEST",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-def describe_image_blip_dk(pil_img: Image.Image) -> str:
-    processor, model = load_blip()
-    prompt = (
-        "Beskriv billedet meget detaljeret på dansk: farver, personer, tøj (hat, sko, snørebånd), "
-        "tilbehør, kropsholdning, baggrund, lys/stemning, små detaljer."
-    )
-    inputs = processor(pil_img, prompt, return_tensors="pt")
-    with torch.inference_mode():
-        out = model.generate(**inputs, max_new_tokens=220)
-    return processor.decode(out[0], skip_special_tokens=True).strip()
+st.title("Test")
 
-st.subheader("🖼️ Detaljeret billedbeskrivelse (BLIP)")
-uploaded2 = st.file_uploader("Upload billede (BLIP)", type=["jpg","jpeg","png","webp"], key="blip_up")
-if uploaded2:
-    img2 = Image.open(io.BytesIO(uploaded2.read())).convert("RGB")
-    st.image(img2, caption="Forhåndsvisning", use_column_width=True)
-    with st.spinner("Genererer beskrivelse..."):
-        st.text_area("Beskrivelse (dansk):", describe_image_blip_dk(img2), height=200)
+st.sidebar.header("ML Model Config")
+
+model_type = st.sidebar.radio(
+    "Select Task", ['Detection', 'Segmentation'])
+
+confidence = float(st.sidebar.slider(
+    "Select Model Confidence", 25, 100, 40)) / 100
+
+# You must set model_path manually since helper is removed
+model_path = None
+if model_type == 'Detection':
+    model_path = Path("path/to/detection/model.pt")
+elif model_type == 'Segmentation':
+    model_path = Path("path/to/segmentation/model.pt")
+
+# Remove model loading since helper is missing
+# try:
+#     model = helper.load_model(model_path)
+# except Exception as ex:
+#     st.error(f"Unable to load model. Check the specified path: {model_path}")
+#     st.error(ex)
+model = None  # Placeholder
+
+st.sidebar.header("Image/Video Config")
+source_radio = st.sidebar.radio(
+    "Select Source", ['Image', 'Video', 'Webcam', 'RTSP', 'YouTube'])
+
+source_img = None
+if source_radio == 'Image':
+    source_img = st.sidebar.file_uploader(
+        "Choose an image...", type=("jpg", "jpeg", "png", 'bmp', 'webp'))
+
+    col1, col2 = st.columns(2)
+
+    uploaded_image = None
+    with col1:
+        try:
+            if source_img is None:
+                st.info("No image uploaded.")
+            else:
+                uploaded_image = Image.open(source_img)
+                st.image(source_img, caption="Uploaded Image",
+                         use_container_width=True)
+        except Exception as ex:
+            st.error("Error occurred while opening the image.")
+            st.error(ex)
+
+    with col2:
+        # Remove detection since model is not loaded
+        st.info("Detection results will appear here.")
+
+elif source_radio == 'Video':
+    st.info("Video functionality is not available (missing helper).")
+
+elif source_radio == 'Webcam':
+    st.info("Webcam functionality is not available (missing helper).")
+
+elif source_radio == 'RTSP':
+    st.info("RTSP functionality is not available (missing helper).")
+
+elif source_radio == 'YouTube':
+    st.info("YouTube functionality is not available (missing helper).")
+
+else:
+    st.error("Please select a valid source type!")
