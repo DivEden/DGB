@@ -1,422 +1,420 @@
 from io import BytesIO
 from zipfile import ZipFile, ZIP_DEFLATED
-from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, List, Dict, Tuple
+import base64
 
 import pandas as pd
 from PIL import Image, ImageOps
 import streamlit as st
 
-# ---------- Forsøg at importere drag&drop-komponent ----------
-try:
-    # pip install streamlit-sortables
-    from streamlit_sortables import sort_items  # type: ignore
-    HAS_SORTABLES = True
-except Exception:
-    HAS_SORTABLES = False
+# --- streamlit-elements (draggable dashboard) ---
+from streamlit_elements import elements, mui, dashboard  # pip install streamlit-elements==0.1.*
 
-# ---------- Sideopsætning ----------
-st.set_page_config(
-    page_title="Arkiv-Upload: Drag & Drop Grupper, Omdøb & Maks KB",
-    page_icon="🖼️",
-    layout="wide",
-)
+# =========================
+# Basal opsætning & konstanter
+# =========================
+st.set_page_config(page_title="Arkiv-Upload (drag thumbnails)", page_icon="🖼️", layout="wide")
+st.title("🖼️ Arkiv-Upload — træk thumbnails mellem kolonner")
 
-st.title("🖼️ Arkiv-Upload: grupper med drag & drop, omdøb & komprimer til maks KB")
-
-# ---------- Konstanter ----------
-SUPPORTED_TYPES = ("jpg", "jpeg", "png", "bmp", "webp", "tiff")
+SUPPORTED = ("jpg", "jpeg", "png", "bmp", "webp", "tiff")
 FORMAT_MAP = {"jpg":"JPEG","jpeg":"JPEG","png":"PNG","webp":"WEBP","tiff":"TIFF","bmp":"BMP"}
-LOSSY_FORMATS = {"jpeg","jpg","webp"}
+LOSSY = {"jpeg","jpg","webp"}
 
-try:
-    RESAMPLE = Image.Resampling.LANCZOS
-except AttributeError:
-    RESAMPLE = Image.LANCZOS
+TOTAL_COLS = 48            # dashboard grid kolonner (vandret)
+ROW_H = 50                 # højere rækker for mere luft
+CARD_W = 6                 # grid-bredde for hvert billed-kort
+CARD_H = 8                 # grid-højde for kortet
+HEADER_H = 2               # grid-højde for kolonne-header
 
-# ---------- Hjælpere ----------
+# =========================
+# Hjælpere
+# =========================
 def human_size(num: int) -> str:
     for unit in ["B","KB","MB","GB"]:
-        if num < 1024.0:
-            return f"{num:3.1f} {unit}"
+        if num < 1024.0: return f"{num:3.1f} {unit}"
         num /= 1024.0
     return f"{num:.1f} TB"
 
 def safe_open_image(file) -> Image.Image:
-    try:
-        file.seek(0)
-    except Exception:
-        pass
+    try: file.seek(0)
+    except Exception: pass
     img = Image.open(file)
-    img = ImageOps.exif_transpose(img)
-    return img
+    return ImageOps.exif_transpose(img)
 
-def normalize_mode_for_format(img: Image.Image, fmt_ext: str) -> Image.Image:
-    if fmt_ext.upper() in {"JPEG","JPG"}:
+def normalize_mode(img: Image.Image, ext_like: str) -> Image.Image:
+    if ext_like.upper() in {"JPEG","JPG"}:
         if img.mode in ("RGBA","LA"):
-            bg = Image.new("RGB", img.size, (255, 255, 255))
+            from PIL import Image as PILImage
+            bg = PILImage.new("RGB", img.size, (255,255,255))
             bg.paste(img, mask=img.split()[-1])
             return bg
         return img.convert("RGB")
     return img
 
-def save_image_bytes(img: Image.Image, ext: str, quality: Optional[int] = None) -> bytes:
+def save_bytes(img: Image.Image, ext: str, quality: Optional[int] = None) -> bytes:
     fmt = FORMAT_MAP.get(ext.lower(), ext.upper())
-    out = BytesIO()
+    buf = BytesIO()
     params = {}
     if ext.lower() in {"jpeg","jpg"}:
-        if quality is not None:
-            params["quality"] = int(quality)
-        params["optimize"] = True
-        params["progressive"] = True
+        if quality is not None: params["quality"] = int(quality)
+        params["optimize"] = True; params["progressive"] = True
     elif ext.lower() == "webp":
-        if quality is not None:
-            params["quality"] = int(quality)
+        if quality is not None: params["quality"] = int(quality)
         params["method"] = 6
-    img = normalize_mode_for_format(img, fmt)
-    img.save(out, format=fmt, **params)
-    return out.getvalue()
+    img = normalize_mode(img, fmt)
+    img.save(buf, format=fmt, **params)
+    return buf.getvalue()
 
 def compress_to_max_kb(img: Image.Image, orig_ext: str, max_kb: int, allow_convert_to_jpeg: bool = True):
-    """
-    Komprimer img, samme opløsning, til <= max_kb hvis muligt.
-    Returnerer: (bytes, out_ext, valgt_quality, under_grænse_bool)
-    """
-    target_bytes = max_kb * 1024
+    """Return (bytes, out_ext, chosen_quality, under_limit_bool) — opløsning ændres ikke."""
+    target = max_kb * 1024
     ext = orig_ext.lower()
 
-    # Tabsformater: binærsøgning i kvalitet
-    if ext in {"jpeg","jpg","webp"}:
+    def try_binary(ext_try: str):
         low, high = 30, 95
-        best_bytes = None
-        best_q = None
-        under = False
-
-        initial = save_image_bytes(img, ext, quality=high)
-        if len(initial) <= target_bytes:
-            return initial, ext, high, True
-
+        best = None; best_q = None; under = False
+        first = save_bytes(img, ext_try, quality=high)
+        if len(first) <= target: return first, ext_try, high, True
         while low <= high:
             mid = (low + high) // 2
-            trial = save_image_bytes(img, ext, quality=mid)
-            if len(trial) <= target_bytes:
-                best_bytes, best_q, under = trial, mid, True
+            trial = save_bytes(img, ext_try, quality=mid)
+            if len(trial) <= target:
+                best, best_q, under = trial, mid, True
                 low = mid + 1
             else:
                 high = mid - 1
+        if best is not None: return best, ext_try, best_q, under
+        lowest = save_bytes(img, ext_try, quality=low)
+        return lowest, ext_try, low, False
 
-        if best_bytes is not None:
-            return best_bytes, ext, best_q, under
-
-        lowest = save_image_bytes(img, ext, quality=low)
-        return lowest, ext, low, False
-
-    # Tabsløse formater: konverter evt. til JPEG
+    if ext in LOSSY:
+        return try_binary(ext)
     if ext in {"png","tiff","bmp"} and allow_convert_to_jpeg:
-        conv_ext = "jpeg"
-        low, high = 30, 95
-        best_bytes = None
-        best_q = None
-        under = False
+        return try_binary("jpeg")
+    raw = save_bytes(img, ext, quality=None)
+    return raw, ext, -1, (len(raw) <= target)
 
-        initial = save_image_bytes(img, conv_ext, quality=high)
-        if len(initial) <= target_bytes:
-            return initial, conv_ext, high, True
-
-        while low <= high:
-            mid = (low + high) // 2
-            trial = save_image_bytes(img, conv_ext, quality=mid)
-            if len(trial) <= target_bytes:
-                best_bytes, best_q, under = trial, mid, True
-                low = mid + 1
-            else:
-                high = mid - 1
-
-        if best_bytes is not None:
-            return best_bytes, conv_ext, best_q, under
-
-        lowest = save_image_bytes(img, conv_ext, quality=low)
-        return lowest, conv_ext, low, False
-
-    # Ellers: gem som originalt (kan være over grænsen)
-    raw = save_image_bytes(img, ext, quality=None)
-    return raw, ext, -1, (len(raw) <= target_bytes)
-
-def build_archive_name(prefix_aab: bool, objektnr: str, letter: Optional[str], ext: str) -> str:
-    base = objektnr.strip()
-    if letter:
-        base = f"{base} {letter}"
-    if prefix_aab:
-        base = f"AAB {base}"
+def build_name(add_aab: bool, objnr: str, letter: Optional[str], ext: str) -> str:
+    base = objnr.strip()
+    if letter: base = f"{base} {letter}"
+    if add_aab: base = f"AAB {base}"
     if not base.lower().endswith(f".{ext.lower()}"):
         base = f"{base}.{ext.lower()}"
     return base
 
-def letters_for_group(items: List[str]) -> Dict[str, Optional[str]]:
-    """
-    a/b/c… i rækkefølge. Hvis kun 1 item i gruppen -> None
-    """
-    if len(items) <= 1:
-        return {items[0]: None} if items else {}
-    return {fn: chr(ord('a') + i) for i, fn in enumerate(items)}
+def letters_for_sorted_by_y(items_y_sorted: List[str]) -> Dict[str, Optional[str]]:
+    """items_y_sorted er rækkefølge fra toppen → a, b, c… (1 element => None)."""
+    if len(items_y_sorted) <= 1:
+        return {items_y_sorted[0]: None} if items_y_sorted else {}
+    return {fn: chr(ord('a') + i) for i, fn in enumerate(items_y_sorted)}
 
-# ---------- Session state: grupper & bank ----------
+def make_thumb_b64(img: Image.Image, max_side=360) -> str:
+    th = img.copy()
+    th.thumbnail((max_side, max_side))
+    b = BytesIO()
+    th.save(b, format="PNG")
+    return base64.b64encode(b.getvalue()).decode("utf-8")
+
+# =========================
+# Session state
+# =========================
+if "files_meta" not in st.session_state:
+    # { filename: {"w": int, "h": int, "thumb": b64, "ext": str} }
+    st.session_state.files_meta: Dict[str, Dict] = {}
+
+if "layout" not in st.session_state:
+    # dashboard layout: { key -> (x,y,w,h) } for billeder
+    st.session_state.layout: Dict[str, Tuple[int,int,int,int]] = {}
+
 if "groups" not in st.session_state:
-    # Hver gruppe: {"id": "G1", "name": "Objektnr her", "items": [filnavne]}
+    # grupper: liste af dicts med id & objektnr (header kolonner)
+    # index 0 reserveret til "Ufordelte" (tegnes separat)
     st.session_state.groups: List[Dict] = []
 
-if "bank" not in st.session_state:
-    # "Ufordelte" filnavne
-    st.session_state.bank: List[str] = []
-
-def reset_bank_with(files):
-    st.session_state.bank = [f.name for f in files]
-    # fjern fra grupper alt der ikke længere findes
-    existing = set(st.session_state.bank)
-    for g in st.session_state.groups:
-        g["items"] = [x for x in g["items"] if x in existing]
-
-def add_group():
-    idx = len(st.session_state.groups) + 1
-    st.session_state.groups.append({"id": f"G{idx}", "name": "", "items": []})
-
-def clear_groups():
-    st.session_state.groups = []
-
-def assign_from_sortables(columns_lists: List[List[str]]):
-    """
-    columns_lists: [bank_list, group1_list, group2_list, ...]
-    Opdaterer session_state.bank og .groups[*]['items'] i samme rækkefølge.
-    """
-    st.session_state.bank = columns_lists[0]
-    for i, g in enumerate(st.session_state.groups, start=1):
-        g["items"] = columns_lists[i]
-
-# ---------- Sidebar: indstillinger ----------
+# =========================
+# Sidebar (enkle indstillinger)
+# =========================
 with st.sidebar:
     st.header("Indstillinger")
-    max_kb = st.number_input("Maks filstørrelse for 'lille' (KB)", min_value=10, max_value=20000, value=400, step=10)
-    add_aab_prefix = st.checkbox("Sæt 'AAB ' foran filnavnet", value=True)
+    max_kb = st.number_input("Maks KB for 'lille'", min_value=10, max_value=20000, value=400, step=10)
+    add_aab = st.checkbox("Sæt 'AAB ' foran filnavn", value=True)
     allow_jpeg = st.checkbox("Tillad konvertering til JPEG (for at nå maks KB)", value=True)
     st.markdown("---")
-    st.caption("‘Stor/’ bevarer opløsning og bytes (kun omdøbt). ‘Lille/’ komprimeres til maks KB – opløsning ændres ikke.")
+    st.caption("‘Stor/’ = originale bytes (kun omdøbt). ‘Lille/’ = samme opløsning, komprimeret til maks KB.")
+    
 
-# ---------- Midterlayout ----------
-left_spacer, center, right_spacer = st.columns([1, 2.5, 1])
-
-with center:
+# =========================
+# Upload + gruppeknapper
+# =========================
+L, C, R = st.columns([1, 2.8, 1])
+with C:
     st.subheader("1) Upload billeder")
-    files = st.file_uploader("Træk og slip eller vælg filer", type=SUPPORTED_TYPES, accept_multiple_files=True)
+    files = st.file_uploader("Træk og slip eller vælg filer", type=SUPPORTED, accept_multiple_files=True)
     if files:
-        reset_bank_with(files)
+        # registrér filer + thumbs + initial layout (i Ufordelte)
+        for f in files:
+            if f.name not in st.session_state.files_meta:
+                try:
+                    img = safe_open_image(f)
+                    b64 = make_thumb_b64(img, 360)
+                    st.session_state.files_meta[f.name] = {
+                        "w": img.size[0], "h": img.size[1], "thumb": b64,
+                        "ext": (Path(f.name).suffix or ".jpg").lstrip(".").lower()
+                    }
+                except Exception:
+                    st.session_state.files_meta[f.name] = {"w": 0, "h": 0, "thumb": "", "ext": (Path(f.name).suffix or ".jpg").lstrip(".").lower()}
+
+            # init placering i "Ufordelte" hvis ikke oprettet
+            if f.name not in st.session_state.layout:
+                # læg dem i kolonne 0 (Ufordelte), stak nedad
+                count_in_bank = sum(1 for k,(x,_,_,_) in st.session_state.layout.items() if x == 0)
+                st.session_state.layout[f.name] = (0, HEADER_H + count_in_bank*(CARD_H+1), CARD_W, CARD_H)
+
+        # (Re)byg thumbnails hvis nogen mangler (fx ved reload)
+        for f in files:
+            if f.name in st.session_state.files_meta and not st.session_state.files_meta[f.name].get("thumb"):
+                try:
+                    f.seek(0)
+                    _img = safe_open_image(f)
+                    st.session_state.files_meta[f.name]["thumb"] = make_thumb_b64(_img, 360)
+                except Exception:
+                    st.session_state.files_meta[f.name]["thumb"] = ""
     else:
-        st.info("Upload billeder for at komme i gang.")
+        st.info("Upload for at fortsætte.")
 
-    st.subheader("2) Opret grupper (ét objektnummer pr. gruppe)")
-    add_cols = st.columns([1,1,6])
-    with add_cols[0]:
-        if st.button("➕ Tilføj gruppe"):
-            add_group()
-    with add_cols[1]:
-        if st.button("🗑️ Ryd grupper"):
-            clear_groups()
+    st.subheader("2) Kolonner")
+    cc1, cc2 = st.columns([1,1])
+    with cc1:
+        if st.button("➕ Tilføj kolonne (gruppe)"):
+            idx = len(st.session_state.groups) + 1
+            st.session_state.groups.append({"id": f"G{idx}", "obj": ""})
+    with cc2:
+        if st.button("🗑️ Ryd alle kolonner"):
+            st.session_state.groups = []
+            # flyt alle items tilbage til Ufordelte (x=0)
+            for k,(x,y,w,h) in list(st.session_state.layout.items()):
+                st.session_state.layout[k] = (0, y, w, h)
 
-    # Navnefelter til grupper (objektnumre)
     if st.session_state.groups:
         name_cols = st.columns(len(st.session_state.groups))
         for i, g in enumerate(st.session_state.groups):
             with name_cols[i]:
-                st.text_input(f"Objektnr for {g['id']}", key=f"group_name_{g['id']}", value=g["name"])
-                # sync tilbage
-                st.session_state.groups[i]["name"] = st.session_state.get(f"group_name_{g['id']}", "")
+                st.text_input(f"Objektnr for {g['id']}", key=f"obj_{g['id']}", value=g["obj"])
+                st.session_state.groups[i]["obj"] = st.session_state.get(f"obj_{g['id']}", "")
 
-    st.subheader("3) Fordel billeder til grupper")
-    if files:
-        file_map = {f.name: f for f in files}
+# =========================
+# Funktion: kolonnegeometri
+# =========================
+def column_x_ranges() -> List[Tuple[int,int,str]]:
+    """
+    Returnerer liste af (x_start, x_end, label) for kolonner:
+    0: Ufordelte, derefter hver gruppe.
+    """
+    col_count = 1 + len(st.session_state.groups)
+    if col_count <= 0: return []
+    # Fordel grid-værdier: første kolonne ca. 12%, resten ligeligt
+    bank_w = max(6, int(TOTAL_COLS * 0.12))          # min 6 "grid units"
+    remain = max(1, TOTAL_COLS - bank_w)
+    each = remain // max(1, len(st.session_state.groups)) if st.session_state.groups else 0
 
-        if HAS_SORTABLES and st.session_state.groups:
-            st.caption("Træk billeder fra **Ufordelte** over i de rigtige kasser. Rækkefølgen bestemmer a/b/c …")
-            # Forbered lister i samme rækkefølge: bank, G1, G2, ...
-            columns_data = [st.session_state.bank] + [g["items"] for g in st.session_state.groups]
-            labels = ["Ufordelte"] + [g["id"] for g in st.session_state.groups]
-            sorted_lists = sort_items(columns_data, labels=labels, direction="horizontal", key="dnd1")
-            # Opdater session state efter drag
-            assign_from_sortables(sorted_lists)
+    ranges = []
+    # Ufordelte:
+    ranges.append((0, max(1, bank_w)-1, "Ufordelte"))
+    # Grupper:
+    x = bank_w
+    for g in st.session_state.groups:
+        x_start = x
+        x_end = min(TOTAL_COLS-1, x_start + max(6, each) - 1)
+        ranges.append((x_start, x_end, g["id"]))
+        x = x_end + 1
+    return ranges
 
-            # Thumbnail preview under hver kolonne (overblik)
-            st.markdown("—")
-            prev_cols = st.columns(len(sorted_lists))
-            for idx, lst in enumerate(sorted_lists):
-                with prev_cols[idx]:
-                    st.write(f"**{labels[idx]}**")
-                    if idx > 0:
-                        st.caption(f"Objektnr: {st.session_state.groups[idx-1]['name'] or '—'}")
-                    for fn in lst:
-                        f = file_map[fn]
-                        try:
-                            f.seek(0)
-                            img = safe_open_image(f)
-                            st.image(img, caption=fn, use_container_width=True)
-                        except Exception as ex:
-                            st.error(f"Kan ikke vise {fn}: {ex}")
-        else:
-            # Fallback: vælg gruppe under hvert preview (ingen ekstern komponent nødvendig)
-            if not st.session_state.groups:
-                st.info("Tilføj mindst én gruppe for at fordele billeder.")
-            else:
-                st.caption("Din installation har ikke drag-&-drop-komponenten. Vælg i stedet gruppe under hvert billede.")
-                options = ["Ufordelte"] + [g["id"] for g in st.session_state.groups]
+def clamp_to_column(x: int, col_idx: int) -> int:
+    xr = column_x_ranges()[col_idx]
+    x_start, x_end, _ = xr
+    width = CARD_W
+    # snap venstre kant inden for spændet
+    return max(x_start, min(x_end - width + 1, x))
 
-                # DEDUP: én samlet liste i visningsrækkefølge
-                seen = set()
-                ordered_files = []
-                for fn in st.session_state.bank:
-                    if fn not in seen:
-                        seen.add(fn)
-                        ordered_files.append(fn)
-                for g in st.session_state.groups:
-                    for fn in g["items"]:
-                        if fn not in seen:
-                            seen.add(fn)
-                            ordered_files.append(fn)
+def which_column(x_center: int) -> int:
+    """Find kolonne ud fra kortets center-x (grid units)."""
+    for i,(xs,xe,_) in enumerate(column_x_ranges()):
+        if xs <= x_center <= xe:
+            return i
+    # udenfor -> Ufordelte
+    return 0
 
-                cols = st.columns(4)
-                for i, fn in enumerate(ordered_files):
-                    f = file_map[fn]
-                    with cols[i % 4]:
-                        try:
-                            f.seek(0)
-                            img = safe_open_image(f)
-                            st.image(img, caption=fn, use_container_width=True)
-                        except Exception:
-                            st.write(fn)
+# =========================
+# Rendér dashboard med streamlit-elements
+# =========================
+C2 = st.container()
+with C2:
+    st.subheader("3) Træk thumbnails mellem kolonner (øverst=a, derefter b, c …)")
+    if not files:
+        st.info("Upload billeder for at se boardet.")
+    else:
+        # Byg dashboard layout: headere + billedkort
+        ranges = column_x_ranges()
 
-                        # Nuværende gruppe for filen
-                        current_group = "Ufordelte"
-                        for g in st.session_state.groups:
-                            if fn in g["items"]:
-                                current_group = g["id"]
-                                break
+        layout_list = []
+        # Header-items
+        for i,(xs, _, label) in enumerate(ranges):
+            key = f"__hdr__{label}"
+            layout_list.append(dashboard.Item(key, xs, 0, CARD_W+2, HEADER_H, isDraggable=False, isResizable=False, moved=False))
+        # Billedkort
+        for fn, (x,y,w,h) in st.session_state.layout.items():
+            layout_list.append(dashboard.Item(fn, x, y, w, h))
 
-                        # Stabil og unik key pr. widget
-                        safe_key = fn.replace(" ", "_").replace("/", "_").replace("\\", "_")
-                        try:
-                            default_idx = options.index(current_group)
-                        except ValueError:
-                            default_idx = 0  # fallback hvis gruppen ikke findes
+        # Vi tracker nye positioner efter drag
+        updated_positions: Dict[str, Tuple[int,int,int,int]] = {}
 
-                        choice = st.selectbox(
-                            "Gruppe",
-                            options,
-                            index=default_idx,
-                            key=f"sel_{i}_{safe_key}",
+        def on_layout_change(updated_layout):
+            # updated_layout er liste af dicts m. nøgler: i,x,y,w,h
+            for it in updated_layout:
+                k = it.get("i")
+                if k and not k.startswith("__hdr__"):
+                    updated_positions[k] = (
+                        it.get("x",0), it.get("y",0),
+                        it.get("w",CARD_W), it.get("h",CARD_H)
+                    )
+
+        # Selve boardet
+        with elements("board"):
+            with dashboard.Grid(
+                layout_list,
+                cols=TOTAL_COLS,
+                rowHeight=ROW_H,
+                draggableHandle=".dragme",
+                preventCollision=True,
+                onLayoutChange=on_layout_change,
+            ):
+                # Render headere
+                for i,(xs, _, label) in enumerate(ranges):
+                    key = f"__hdr__{label}"
+                    with mui.Paper(key=key, elevation=1, sx={"p": 1.0, "bgcolor":"#f7f7f7", "borderRadius": 2}):
+                        mui.Typography(
+                            label if i==0 else f"{label} — objektnr: {st.session_state.groups[i-1]['obj'] if i>0 else ''}",
+                            variant="subtitle2"
                         )
 
-                        if choice != current_group:
-                            # Fjern filen fra ALLE containere først (undgå dobbeltforekomst)
-                            st.session_state.bank = [x for x in st.session_state.bank if x != fn]
-                            for g in st.session_state.groups:
-                                g["items"] = [x for x in g["items"] if x != fn]
+                # Render billed-kort
+                present_keys = [it["i"] for it in layout_list if not it["i"].startswith("__hdr__")]
+                for fn, meta in st.session_state.files_meta.items():
+                    if fn not in present_keys:
+                        continue
+                    thumb64 = meta["thumb"]
+                    with mui.Card(key=fn, elevation=3, sx={"borderRadius": 2, "overflow":"hidden"}):
+                        with mui.CardActionArea(className="dragme"):  # drag handle
+                            if thumb64:
+                                mui.CardMedia(
+                                    component="img",
+                                    image=f"data:image/png;base64,{thumb64}",
+                                    sx={"width": "100%", "display": "block"}
+                                )
+                            with mui.CardContent(sx={"p":1}):
+                                mui.Typography(fn, variant="caption")
 
-                            # Tilføj til nyt valg
-                            if choice == "Ufordelte":
-                                st.session_state.bank.append(fn)
-                            else:
-                                for g in st.session_state.groups:
-                                    if g["id"] == choice:
-                                        g["items"].append(fn)
-                                        break
+        # Efter boardet: gem nye positioner og SNAP til nærmeste kolonne
+        if updated_positions:
+            for k,(x,y,w,h) in updated_positions.items():
+                st.session_state.layout[k] = (x,y,w,h)
 
-    st.subheader("4) Kør")
-    run = st.button("Upload & behandl", type="primary", use_container_width=True)
+            # snap ‘x’ ind i nærmeste kolonne
+            ranges = column_x_ranges()
+            for k,(x,y,w,h) in list(st.session_state.layout.items()):
+                cx = x + w//2
+                col_idx = which_column(cx)
+                snapped_x = clamp_to_column(x, col_idx)
+                st.session_state.layout[k] = (snapped_x, y, w, h)
 
-# ---------- Behandling ----------
+# =========================
+# Behandling
+# =========================
 results: List[Dict[str, str]] = []
-zip_buffer = BytesIO()
+zip_buf = BytesIO()
+
+C3 = st.container()
+with C3:
+    st.subheader("4) Behandl")
+    run = st.button("Behandl & download ZIP", type="primary", use_container_width=True)
 
 if run:
-    if "files" not in locals() or not files:
+    if not files:
         st.error("Upload billeder først.")
+    elif not st.session_state.groups or any(g["obj"].strip()=="" for g in st.session_state.groups):
+        st.error("Hver gruppe-kolonne skal have et objektnummer.")
     else:
-        file_names = [f.name for f in files]
-        grouped_items = set(x for g in st.session_state.groups for x in g["items"])
-        # NY validering: tjek faktiske uallokerede ud fra grupper, ikke kun 'bank'
-        unassigned = [fn for fn in file_names if fn not in grouped_items]
+        # kolonne-info
+        ranges = column_x_ranges()
+        col_info = []
+        for idx,(xs,xe,label) in enumerate(ranges):
+            if idx==0:
+                col_info.append((label, ""))  # Ufordelte (ignoreres ved output)
+            else:
+                col_info.append((label, st.session_state.groups[idx-1]["obj"].strip()))
 
-        if not st.session_state.groups or any(g["name"].strip() == "" for g in st.session_state.groups):
-            st.error("Hver gruppe skal have et objektnummer.")
-        elif unassigned:
-            st.error("Der er stadig ufordelte billeder:\n- " + "\n- ".join(unassigned))
+        # sorter items pr. kolonne efter y (top først)
+        cols_items: Dict[int, List[Tuple[str,int]]] = {i:[] for i in range(len(ranges))}
+        for fn,(x,y,w,h) in st.session_state.layout.items():
+            cx = x + w//2
+            col_idx = which_column(cx)
+            cols_items[col_idx].append((fn,y))
+        for i in cols_items.keys():
+            cols_items[i].sort(key=lambda t: t[1])  # efter y
+
+        # valider: ingen i "Ufordelte"
+        unassigned = [fn for (fn,_) in cols_items.get(0,[])]
+        if unassigned:
+            st.error("Træk alle billeder fra ‘Ufordelte’ til en gruppe-kolonne først:\n- " + "\n- ".join(unassigned))
         else:
-            # Lav bogstaver for hver gruppe og byg navne
-            file_map = {f.name: f for f in files}
-            with ZipFile(zip_buffer, "w", ZIP_DEFLATED) as zipf:
-                for g in st.session_state.groups:
-                    objektnr = g["name"].strip()
-                    items = g["items"]
-
-                    # a/b/c pr. gruppens rækkefølge
-                    if len(items) <= 1:
-                        letters = {items[0]: None} if items else {}
-                    else:
-                        letters = {fn: chr(ord('a') + i) for i, fn in enumerate(items)}
-
-                    for fn in items:
-                        f = file_map[fn]
+            # map filnavn -> UploadedFile
+            fmap = {f.name: f for f in files}
+            with ZipFile(zip_buf, "w", ZIP_DEFLATED) as zipf:
+                for col_idx in range(1, len(ranges)):
+                    _, objektnr = col_info[col_idx]
+                    ordered_fns = [fn for (fn,_) in cols_items[col_idx]]  # top→bund
+                    letters = letters_for_sorted_by_y(ordered_fns)
+                    for fn in ordered_fns:
+                        f = fmap[fn]
                         letter = letters.get(fn)
-                        original_name = Path(f.name)
-                        orig_ext = (original_name.suffix or ".jpg").lstrip(".").lower()
+                        orig_ext = (Path(f.name).suffix or ".jpg").lstrip(".").lower()
 
-                        # --- STOR: behold original bytes, kun omdøb ---
+                        # STOR: original bytes, nyt navn
                         f.seek(0)
                         big_bytes = f.read()
-                        big_name = build_archive_name(add_aab_prefix, objektnr, letter, orig_ext)
+                        big_name = build_name(add_aab, objektnr, letter, orig_ext)
                         zipf.writestr(f"stor/{big_name}", big_bytes)
 
-                        # --- LILLE: komprimer til maks KB ---
+                        # LILLE: komprimer til maks KB
                         f.seek(0)
                         img = safe_open_image(f)
-                        w0, h0 = img.size
-                        small_bytes, out_ext, used_q, under = compress_to_max_kb(
+                        small_bytes, out_ext, q, under = compress_to_max_kb(
                             img, orig_ext, int(max_kb), allow_convert_to_jpeg=allow_jpeg
                         )
-                        small_name = build_archive_name(add_aab_prefix, objektnr, letter, out_ext)
+                        small_name = build_name(add_aab, objektnr, letter, out_ext)
                         zipf.writestr(f"lille/{small_name}", small_bytes)
 
-                        results.append(
-                            {
-                                "Gruppe": g["id"],
-                                "Objektnr": objektnr,
-                                "Fil": fn,
-                                "Bogstav": letter if letter else "-",
-                                "Original (BxH)": f"{w0}×{h0}",
-                                "Stor (navn)": big_name,
-                                "Lille (navn)": small_name,
-                                "Lille ≤ maks KB": "Ja" if under else "Nej",
-                                "Kvalitet/Format": f"{('q='+str(used_q)) if used_q!=-1 else 'n/a'}/{out_ext}",
-                                "Lille størrelse": human_size(len(small_bytes)),
-                            }
-                        )
+                        results.append({
+                            "Kolonne": col_info[col_idx][0],
+                            "Objektnr": objektnr,
+                            "Fil": fn,
+                            "Bogstav": letter or "-",
+                            "Lille ≤ maks KB": "Ja" if under else "Nej",
+                            "Lille størrelse": human_size(len(small_bytes)),
+                        })
 
-# ---------- Output ----------
+# =========================
+# Output
+# =========================
 if results:
     st.subheader("Resultat")
     st.dataframe(pd.DataFrame(results), use_container_width=True)
-
-    zip_buffer.seek(0)
+    zip_buf.seek(0)
     st.download_button(
-        label="Download ZIP (stor/ & lille/)",
-        data=zip_buffer,
+        "Download ZIP (stor/ & lille/)",
+        data=zip_buf,
         file_name="arkiv_billeder.zip",
         mime="application/zip",
         use_container_width=True,
-    )
-
-# ---------- Hjælp ----------
-with center:
-    st.caption(
-        "Træk billeder til en gruppe (eller vælg i dropdown i fallback). Rækkefølgen i hver gruppe afgør a, b, c… "
-        "Navne skabes som “(AAB )?Objektnr [a|b|c]” med original eller konverteret extension. "
-        "‘Stor/’ bevarer opløsning (kun omdøbt). ‘Lille/’ komprimeres til maks KB uden at ændre opløsning."
     )
