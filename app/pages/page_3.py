@@ -2,271 +2,421 @@ from io import BytesIO
 from zipfile import ZipFile, ZIP_DEFLATED
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Optional, Tuple, List, Dict
 
+import pandas as pd
 from PIL import Image, ImageOps
 import streamlit as st
 
-# ---------- Page setup ----------
+# ---------- Forsøg at importere drag&drop-komponent ----------
+try:
+    # pip install streamlit-sortables
+    from streamlit_sortables import sort_items  # type: ignore
+    HAS_SORTABLES = True
+except Exception:
+    HAS_SORTABLES = False
+
+# ---------- Sideopsætning ----------
 st.set_page_config(
-    page_title="Image Resizer & Renamer",
+    page_title="Arkiv-Upload: Drag & Drop Grupper, Omdøb & Maks KB",
     page_icon="🖼️",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
 
-st.title("🖼️ Batch Image Resizer & Renamer")
-st.caption("Upload a bunch of images, scale them down, and rename them in one go.")
+st.title("🖼️ Arkiv-Upload: grupper med drag & drop, omdøb & komprimer til maks KB")
 
-# ---------- Helpers ----------
+# ---------- Konstanter ----------
 SUPPORTED_TYPES = ("jpg", "jpeg", "png", "bmp", "webp", "tiff")
+FORMAT_MAP = {"jpg":"JPEG","jpeg":"JPEG","png":"PNG","webp":"WEBP","tiff":"TIFF","bmp":"BMP"}
+LOSSY_FORMATS = {"jpeg","jpg","webp"}
 
+try:
+    RESAMPLE = Image.Resampling.LANCZOS
+except AttributeError:
+    RESAMPLE = Image.LANCZOS
 
+# ---------- Hjælpere ----------
 def human_size(num: int) -> str:
-    for unit in ["B", "KB", "MB", "GB"]:
+    for unit in ["B","KB","MB","GB"]:
         if num < 1024.0:
             return f"{num:3.1f} {unit}"
         num /= 1024.0
     return f"{num:.1f} TB"
 
-
-def compute_new_size(
-    w: int,
-    h: int,
-    mode: str,
-    max_w: Optional[int],
-    max_h: Optional[int],
-    percent: Optional[int],
-) -> Tuple[int, int]:
-    if mode == "By longest side":
-        longest = max(w, h)
-        target = max(max_w or 0, max_h or 0)
-        if target <= 0 or longest <= target:
-            return w, h
-        scale = target / float(longest)
-        return max(1, int(round(w * scale))), max(1, int(round(h * scale)))
-
-    if mode == "Max width/height":
-        # Fit into a bounding box (max_w x max_h)
-        mw = max_w or w
-        mh = max_h or h
-        scale = min(mw / w, mh / h)
-        if scale >= 1:
-            return w, h
-        return max(1, int(round(w * scale))), max(1, int(round(h * scale)))
-
-    if mode == "By percentage":
-        pct = (percent or 100) / 100.0
-        return max(1, int(round(w * pct))), max(1, int(round(h * pct)))
-
-    return w, h
-
-
 def safe_open_image(file) -> Image.Image:
+    try:
+        file.seek(0)
+    except Exception:
+        pass
     img = Image.open(file)
-    # Respect EXIF orientation
     img = ImageOps.exif_transpose(img)
     return img
 
-
-def normalize_mode_for_format(img: Image.Image, fmt: str) -> Image.Image:
-    """Ensure compatible mode for chosen output format."""
-    if fmt.upper() in {"JPEG", "JPG"}:
-        # JPEG doesn't support alpha
-        if img.mode in ("RGBA", "LA"):
+def normalize_mode_for_format(img: Image.Image, fmt_ext: str) -> Image.Image:
+    if fmt_ext.upper() in {"JPEG","JPG"}:
+        if img.mode in ("RGBA","LA"):
             bg = Image.new("RGB", img.size, (255, 255, 255))
             bg.paste(img, mask=img.split()[-1])
             return bg
         return img.convert("RGB")
     return img
 
+def save_image_bytes(img: Image.Image, ext: str, quality: Optional[int] = None) -> bytes:
+    fmt = FORMAT_MAP.get(ext.lower(), ext.upper())
+    out = BytesIO()
+    params = {}
+    if ext.lower() in {"jpeg","jpg"}:
+        if quality is not None:
+            params["quality"] = int(quality)
+        params["optimize"] = True
+        params["progressive"] = True
+    elif ext.lower() == "webp":
+        if quality is not None:
+            params["quality"] = int(quality)
+        params["method"] = 6
+    img = normalize_mode_for_format(img, fmt)
+    img.save(out, format=fmt, **params)
+    return out.getvalue()
 
-def build_filename(
-    pattern: str,
-    index: int,
-    pad: int,
-    orig_stem: str,
-    ext: str,
-    now: datetime,
-) -> str:
-    # Supported placeholders: {n}, {orig}, {ext}, {date}, {time}
-    n_str = str(index).zfill(pad)
-    out = pattern
-    out = out.replace("{n}", n_str)
-    out = out.replace("{orig}", orig_stem)
-    out = out.replace("{ext}", ext)
-    out = out.replace("{date}", now.strftime("%Y%m%d"))
-    out = out.replace("{time}", now.strftime("%H%M%S"))
-    # Ensure extension present once
-    if not out.lower().endswith(f".{ext.lower()}"):
-        out = f"{out}.{ext}"
-    return out
+def compress_to_max_kb(img: Image.Image, orig_ext: str, max_kb: int, allow_convert_to_jpeg: bool = True):
+    """
+    Komprimer img, samme opløsning, til <= max_kb hvis muligt.
+    Returnerer: (bytes, out_ext, valgt_quality, under_grænse_bool)
+    """
+    target_bytes = max_kb * 1024
+    ext = orig_ext.lower()
 
+    # Tabsformater: binærsøgning i kvalitet
+    if ext in {"jpeg","jpg","webp"}:
+        low, high = 30, 95
+        best_bytes = None
+        best_q = None
+        under = False
 
-# ---------- Sidebar controls ----------
-st.sidebar.header("Source")
-files = st.sidebar.file_uploader(
-    "Upload images (multiple)", type=SUPPORTED_TYPES, accept_multiple_files=True
-)
+        initial = save_image_bytes(img, ext, quality=high)
+        if len(initial) <= target_bytes:
+            return initial, ext, high, True
 
-st.sidebar.header("Resize Options")
-resize_mode = st.sidebar.radio(
-    "How to resize?", ["By longest side", "Max width/height", "By percentage"],
-)
+        while low <= high:
+            mid = (low + high) // 2
+            trial = save_image_bytes(img, ext, quality=mid)
+            if len(trial) <= target_bytes:
+                best_bytes, best_q, under = trial, mid, True
+                low = mid + 1
+            else:
+                high = mid - 1
 
-col_rs1, col_rs2 = st.sidebar.columns(2)
-max_width = None
-max_height = None
-percent = None
+        if best_bytes is not None:
+            return best_bytes, ext, best_q, under
 
-if resize_mode == "By longest side":
-    max_width = col_rs1.number_input("Longest side (px)", min_value=1, value=1600)
-elif resize_mode == "Max width/height":
-    max_width = col_rs1.number_input("Max width (px)", min_value=1, value=1600)
-    max_height = col_rs2.number_input("Max height (px)", min_value=1, value=1200)
-else:
-    percent = col_rs1.slider("Scale %", min_value=1, max_value=100, value=50)
+        lowest = save_image_bytes(img, ext, quality=low)
+        return lowest, ext, low, False
 
-st.sidebar.header("Output")
-output_format = st.sidebar.selectbox(
-    "Format",
-    ["Keep original", "JPEG", "PNG", "WEBP"],
-    index=0,
-)
+    # Tabsløse formater: konverter evt. til JPEG
+    if ext in {"png","tiff","bmp"} and allow_convert_to_jpeg:
+        conv_ext = "jpeg"
+        low, high = 30, 95
+        best_bytes = None
+        best_q = None
+        under = False
 
-quality = st.sidebar.slider("Quality (JPEG/WebP)", 10, 100, 85)
-strip_exif = st.sidebar.checkbox("Strip EXIF/metadata", value=True)
+        initial = save_image_bytes(img, conv_ext, quality=high)
+        if len(initial) <= target_bytes:
+            return initial, conv_ext, high, True
 
-st.sidebar.header("Renaming")
-rename_enabled = st.sidebar.checkbox("Enable renaming", value=True)
+        while low <= high:
+            mid = (low + high) // 2
+            trial = save_image_bytes(img, conv_ext, quality=mid)
+            if len(trial) <= target_bytes:
+                best_bytes, best_q, under = trial, mid, True
+                low = mid + 1
+            else:
+                high = mid - 1
 
-default_pattern = "img_{n}_{orig}"
-pattern = st.sidebar.text_input(
-    "Filename pattern",
-    value=default_pattern,
-    help=(
-        "Use placeholders: {n} (number), {orig} (original name without ext), "
-        "{ext} (extension), {date} (YYYYMMDD), {time} (HHMMSS). Extension is appended if missing."
-    ),
-    disabled=not rename_enabled,
-)
-start_num = st.sidebar.number_input("Start number", min_value=0, value=1, disabled=not rename_enabled)
-pad_width = st.sidebar.number_input("Zero padding", min_value=1, max_value=6, value=3, disabled=not rename_enabled)
+        if best_bytes is not None:
+            return best_bytes, conv_ext, best_q, under
 
-st.sidebar.header("Run")
-process_btn = st.sidebar.button("Process images", type="primary", use_container_width=True)
+        lowest = save_image_bytes(img, conv_ext, quality=low)
+        return lowest, conv_ext, low, False
 
-# ---------- Main area ----------
-left, right = st.columns([1, 1])
+    # Ellers: gem som originalt (kan være over grænsen)
+    raw = save_image_bytes(img, ext, quality=None)
+    return raw, ext, -1, (len(raw) <= target_bytes)
 
-with left:
-    st.subheader("Uploads")
-    if not files:
-        st.info("No images uploaded yet.")
-    else:
-        st.write(f"{len(files)} file(s) selected:")
-        for f in files:
-            st.write(f"• {f.name} ({human_size(f.size)})")
+def build_archive_name(prefix_aab: bool, objektnr: str, letter: Optional[str], ext: str) -> str:
+    base = objektnr.strip()
+    if letter:
+        base = f"{base} {letter}"
+    if prefix_aab:
+        base = f"AAB {base}"
+    if not base.lower().endswith(f".{ext.lower()}"):
+        base = f"{base}.{ext.lower()}"
+    return base
 
-with right:
-    st.subheader("Preview")
+def letters_for_group(items: List[str]) -> Dict[str, Optional[str]]:
+    """
+    a/b/c… i rækkefølge. Hvis kun 1 item i gruppen -> None
+    """
+    if len(items) <= 1:
+        return {items[0]: None} if items else {}
+    return {fn: chr(ord('a') + i) for i, fn in enumerate(items)}
+
+# ---------- Session state: grupper & bank ----------
+if "groups" not in st.session_state:
+    # Hver gruppe: {"id": "G1", "name": "Objektnr her", "items": [filnavne]}
+    st.session_state.groups: List[Dict] = []
+
+if "bank" not in st.session_state:
+    # "Ufordelte" filnavne
+    st.session_state.bank: List[str] = []
+
+def reset_bank_with(files):
+    st.session_state.bank = [f.name for f in files]
+    # fjern fra grupper alt der ikke længere findes
+    existing = set(st.session_state.bank)
+    for g in st.session_state.groups:
+        g["items"] = [x for x in g["items"] if x in existing]
+
+def add_group():
+    idx = len(st.session_state.groups) + 1
+    st.session_state.groups.append({"id": f"G{idx}", "name": "", "items": []})
+
+def clear_groups():
+    st.session_state.groups = []
+
+def assign_from_sortables(columns_lists: List[List[str]]):
+    """
+    columns_lists: [bank_list, group1_list, group2_list, ...]
+    Opdaterer session_state.bank og .groups[*]['items'] i samme rækkefølge.
+    """
+    st.session_state.bank = columns_lists[0]
+    for i, g in enumerate(st.session_state.groups, start=1):
+        g["items"] = columns_lists[i]
+
+# ---------- Sidebar: indstillinger ----------
+with st.sidebar:
+    st.header("Indstillinger")
+    max_kb = st.number_input("Maks filstørrelse for 'lille' (KB)", min_value=10, max_value=20000, value=400, step=10)
+    add_aab_prefix = st.checkbox("Sæt 'AAB ' foran filnavnet", value=True)
+    allow_jpeg = st.checkbox("Tillad konvertering til JPEG (for at nå maks KB)", value=True)
+    st.markdown("---")
+    st.caption("‘Stor/’ bevarer opløsning og bytes (kun omdøbt). ‘Lille/’ komprimeres til maks KB – opløsning ændres ikke.")
+
+# ---------- Midterlayout ----------
+left_spacer, center, right_spacer = st.columns([1, 2.5, 1])
+
+with center:
+    st.subheader("1) Upload billeder")
+    files = st.file_uploader("Træk og slip eller vælg filer", type=SUPPORTED_TYPES, accept_multiple_files=True)
     if files:
-        thumbs = st.container()
-        grid_cols = st.columns(4)
-        for i, f in enumerate(files):
-            try:
-                img = safe_open_image(f)
-                grid_cols[i % 4].image(img, caption=f.name, use_container_width=True)
-            except Exception as ex:
-                grid_cols[i % 4].error(f"Failed to open {f.name}: {ex}")
+        reset_bank_with(files)
+    else:
+        st.info("Upload billeder for at komme i gang.")
 
-st.divider()
+    st.subheader("2) Opret grupper (ét objektnummer pr. gruppe)")
+    add_cols = st.columns([1,1,6])
+    with add_cols[0]:
+        if st.button("➕ Tilføj gruppe"):
+            add_group()
+    with add_cols[1]:
+        if st.button("🗑️ Ryd grupper"):
+            clear_groups()
 
-# ---------- Processing ----------
-results = []  # list of dicts with info for table
+    # Navnefelter til grupper (objektnumre)
+    if st.session_state.groups:
+        name_cols = st.columns(len(st.session_state.groups))
+        for i, g in enumerate(st.session_state.groups):
+            with name_cols[i]:
+                st.text_input(f"Objektnr for {g['id']}", key=f"group_name_{g['id']}", value=g["name"])
+                # sync tilbage
+                st.session_state.groups[i]["name"] = st.session_state.get(f"group_name_{g['id']}", "")
+
+    st.subheader("3) Fordel billeder til grupper")
+    if files:
+        file_map = {f.name: f for f in files}
+
+        if HAS_SORTABLES and st.session_state.groups:
+            st.caption("Træk billeder fra **Ufordelte** over i de rigtige kasser. Rækkefølgen bestemmer a/b/c …")
+            # Forbered lister i samme rækkefølge: bank, G1, G2, ...
+            columns_data = [st.session_state.bank] + [g["items"] for g in st.session_state.groups]
+            labels = ["Ufordelte"] + [g["id"] for g in st.session_state.groups]
+            sorted_lists = sort_items(columns_data, labels=labels, direction="horizontal", key="dnd1")
+            # Opdater session state efter drag
+            assign_from_sortables(sorted_lists)
+
+            # Thumbnail preview under hver kolonne (overblik)
+            st.markdown("—")
+            prev_cols = st.columns(len(sorted_lists))
+            for idx, lst in enumerate(sorted_lists):
+                with prev_cols[idx]:
+                    st.write(f"**{labels[idx]}**")
+                    if idx > 0:
+                        st.caption(f"Objektnr: {st.session_state.groups[idx-1]['name'] or '—'}")
+                    for fn in lst:
+                        f = file_map[fn]
+                        try:
+                            f.seek(0)
+                            img = safe_open_image(f)
+                            st.image(img, caption=fn, use_container_width=True)
+                        except Exception as ex:
+                            st.error(f"Kan ikke vise {fn}: {ex}")
+        else:
+            # Fallback: vælg gruppe under hvert preview (ingen ekstern komponent nødvendig)
+            if not st.session_state.groups:
+                st.info("Tilføj mindst én gruppe for at fordele billeder.")
+            else:
+                st.caption("Din installation har ikke drag-&-drop-komponenten. Vælg i stedet gruppe under hvert billede.")
+                options = ["Ufordelte"] + [g["id"] for g in st.session_state.groups]
+
+                # DEDUP: én samlet liste i visningsrækkefølge
+                seen = set()
+                ordered_files = []
+                for fn in st.session_state.bank:
+                    if fn not in seen:
+                        seen.add(fn)
+                        ordered_files.append(fn)
+                for g in st.session_state.groups:
+                    for fn in g["items"]:
+                        if fn not in seen:
+                            seen.add(fn)
+                            ordered_files.append(fn)
+
+                cols = st.columns(4)
+                for i, fn in enumerate(ordered_files):
+                    f = file_map[fn]
+                    with cols[i % 4]:
+                        try:
+                            f.seek(0)
+                            img = safe_open_image(f)
+                            st.image(img, caption=fn, use_container_width=True)
+                        except Exception:
+                            st.write(fn)
+
+                        # Nuværende gruppe for filen
+                        current_group = "Ufordelte"
+                        for g in st.session_state.groups:
+                            if fn in g["items"]:
+                                current_group = g["id"]
+                                break
+
+                        # Stabil og unik key pr. widget
+                        safe_key = fn.replace(" ", "_").replace("/", "_").replace("\\", "_")
+                        try:
+                            default_idx = options.index(current_group)
+                        except ValueError:
+                            default_idx = 0  # fallback hvis gruppen ikke findes
+
+                        choice = st.selectbox(
+                            "Gruppe",
+                            options,
+                            index=default_idx,
+                            key=f"sel_{i}_{safe_key}",
+                        )
+
+                        if choice != current_group:
+                            # Fjern filen fra ALLE containere først (undgå dobbeltforekomst)
+                            st.session_state.bank = [x for x in st.session_state.bank if x != fn]
+                            for g in st.session_state.groups:
+                                g["items"] = [x for x in g["items"] if x != fn]
+
+                            # Tilføj til nyt valg
+                            if choice == "Ufordelte":
+                                st.session_state.bank.append(fn)
+                            else:
+                                for g in st.session_state.groups:
+                                    if g["id"] == choice:
+                                        g["items"].append(fn)
+                                        break
+
+    st.subheader("4) Kør")
+    run = st.button("Upload & behandl", type="primary", use_container_width=True)
+
+# ---------- Behandling ----------
+results: List[Dict[str, str]] = []
 zip_buffer = BytesIO()
 
-if process_btn and files:
-    now = datetime.now()
-    with ZipFile(zip_buffer, "w", ZIP_DEFLATED) as zipf:
-        idx = start_num
-        for f in files:
-            try:
-                orig_name = Path(f.name)
-                orig_ext = (orig_name.suffix or ".jpg").lstrip(".")
-                out_ext = orig_ext if output_format == "Keep original" else output_format.lower()
-                img = safe_open_image(f)
-                w0, h0 = img.size
+if run:
+    if "files" not in locals() or not files:
+        st.error("Upload billeder først.")
+    else:
+        file_names = [f.name for f in files]
+        grouped_items = set(x for g in st.session_state.groups for x in g["items"])
+        # NY validering: tjek faktiske uallokerede ud fra grupper, ikke kun 'bank'
+        unassigned = [fn for fn in file_names if fn not in grouped_items]
 
-                # Compute new size
-                new_w, new_h = compute_new_size(w0, h0, resize_mode, max_width, max_height, percent)
-                if (new_w, new_h) != (w0, h0):
-                    img = img.resize((new_w, new_h), Image.LANCZOS)
+        if not st.session_state.groups or any(g["name"].strip() == "" for g in st.session_state.groups):
+            st.error("Hver gruppe skal have et objektnummer.")
+        elif unassigned:
+            st.error("Der er stadig ufordelte billeder:\n- " + "\n- ".join(unassigned))
+        else:
+            # Lav bogstaver for hver gruppe og byg navne
+            file_map = {f.name: f for f in files}
+            with ZipFile(zip_buffer, "w", ZIP_DEFLATED) as zipf:
+                for g in st.session_state.groups:
+                    objektnr = g["name"].strip()
+                    items = g["items"]
 
-                # Metadata handling
-                save_params = {}
-                
-                # Strip or preserve EXIF
-                if strip_exif:
-                    exif_bytes = None
-                else:
-                    exif_bytes = img.getexif()
-                    if exif_bytes:
-                        save_params["exif"] = exif_bytes.tobytes()
+                    # a/b/c pr. gruppens rækkefølge
+                    if len(items) <= 1:
+                        letters = {items[0]: None} if items else {}
+                    else:
+                        letters = {fn: chr(ord('a') + i) for i, fn in enumerate(items)}
 
-                # Normalize for format and set options
-                img = normalize_mode_for_format(img, out_ext)
-                if out_ext in ("jpeg", "jpg"):
-                    save_params["quality"] = int(quality)
-                    save_params["optimize"] = True
-                elif out_ext == "webp":
-                    save_params["quality"] = int(quality)
-                
-                # Build filename
-                if rename_enabled:
-                    out_name = build_filename(pattern, idx, int(pad_width), orig_name.stem, out_ext, now)
-                else:
-                    # Keep original stem, change ext if needed
-                    out_name = orig_name.with_suffix(f".{out_ext}").name
+                    for fn in items:
+                        f = file_map[fn]
+                        letter = letters.get(fn)
+                        original_name = Path(f.name)
+                        orig_ext = (original_name.suffix or ".jpg").lstrip(".").lower()
 
-                # Save into the zip
-                out_bytes = BytesIO()
-                img.save(out_bytes, format=out_ext.upper(), **save_params)
-                out_bytes.seek(0)
-                zipf.writestr(out_name, out_bytes.read())
+                        # --- STOR: behold original bytes, kun omdøb ---
+                        f.seek(0)
+                        big_bytes = f.read()
+                        big_name = build_archive_name(add_aab_prefix, objektnr, letter, orig_ext)
+                        zipf.writestr(f"stor/{big_name}", big_bytes)
 
-                results.append(
-                    {
-                        "Original name": orig_name.name,
-                        "New name": out_name,
-                        "Original size": f"{w0}×{h0}",
-                        "New size": f"{new_w}×{new_h}",
-                    }
-                )
-                idx += 1
-            except Exception as ex:
-                results.append(
-                    {
-                        "Original name": f.name,
-                        "New name": "(failed)",
-                        "Original size": "-",
-                        "New size": str(ex),
-                    }
-                )
+                        # --- LILLE: komprimer til maks KB ---
+                        f.seek(0)
+                        img = safe_open_image(f)
+                        w0, h0 = img.size
+                        small_bytes, out_ext, used_q, under = compress_to_max_kb(
+                            img, orig_ext, int(max_kb), allow_convert_to_jpeg=allow_jpeg
+                        )
+                        small_name = build_archive_name(add_aab_prefix, objektnr, letter, out_ext)
+                        zipf.writestr(f"lille/{small_name}", small_bytes)
 
+                        results.append(
+                            {
+                                "Gruppe": g["id"],
+                                "Objektnr": objektnr,
+                                "Fil": fn,
+                                "Bogstav": letter if letter else "-",
+                                "Original (BxH)": f"{w0}×{h0}",
+                                "Stor (navn)": big_name,
+                                "Lille (navn)": small_name,
+                                "Lille ≤ maks KB": "Ja" if under else "Nej",
+                                "Kvalitet/Format": f"{('q='+str(used_q)) if used_q!=-1 else 'n/a'}/{out_ext}",
+                                "Lille størrelse": human_size(len(small_bytes)),
+                            }
+                        )
+
+# ---------- Output ----------
 if results:
-    st.subheader("Results")
-    st.dataframe(results, use_container_width=True)
+    st.subheader("Resultat")
+    st.dataframe(pd.DataFrame(results), use_container_width=True)
 
     zip_buffer.seek(0)
     st.download_button(
-        label="Download processed images (ZIP)",
+        label="Download ZIP (stor/ & lille/)",
         data=zip_buffer,
-        file_name="resized_renamed_images.zip",
+        file_name="arkiv_billeder.zip",
         mime="application/zip",
         use_container_width=True,
     )
 
-st.caption(
-    "Tip: Use a pattern like `project_{date}_img-{n}` to get names like `project_20250101_img-001.jpg`."
-)
+# ---------- Hjælp ----------
+with center:
+    st.caption(
+        "Træk billeder til en gruppe (eller vælg i dropdown i fallback). Rækkefølgen i hver gruppe afgør a, b, c… "
+        "Navne skabes som “(AAB )?Objektnr [a|b|c]” med original eller konverteret extension. "
+        "‘Stor/’ bevarer opløsning (kun omdøbt). ‘Lille/’ komprimeres til maks KB uden at ændre opløsning."
+    )
