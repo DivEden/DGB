@@ -4,7 +4,7 @@ import re
 from typing import List, Dict, Optional
 
 import pandas as pd
-from flask import Blueprint, request, render_template_string, send_file, redirect, url_for
+from flask import Blueprint, request, render_template, send_file, redirect, url_for
 
 tekstnormalisering_bp = Blueprint("tekstnormalisering", __name__)
 
@@ -62,41 +62,15 @@ def guess_column(df: pd.DataFrame) -> Optional[str]:
                 return col
     return df.columns[0]
 
+# Lille in-memory payload store (single-process). Brug Redis etc. hvis du skal skalere.
+
 # ---------- HTML-skabelon ----------
 PAGE_HTML = r"""
-<!doctype html>
-<html lang="da">
-<head>
-  <meta charset="utf-8" />
-  <title>Arkivnummer-normalisering</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root{
-      --bg:#f8fafc; --panel:#fff; --muted:#475569; --border:#e2e8f0; --accent:#2563eb;
-    }
-    html, body { background: var(--bg); color:#0f172a; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
-    .card { background: var(--panel); border:1px solid var(--border); border-radius:12px; box-shadow: 0 4px 10px rgba(0,0,0,.05); padding:16px; margin-bottom:16px; }
-    h1,h2,h3 { margin: 0 0 8px 0; }
-    .tabs { display:flex; gap:8px; margin-bottom:12px; }
-    .tab a { display:inline-block; padding:8px 12px; border:1px solid var(--border); border-radius:999px; text-decoration:none; color:#0f172a; background:#f1f5f9; }
-    .tab a.active { background:#e0e7ff; border-color:#c7d2fe; color:#1d4ed8; }
-    .row { display:flex; gap:16px; flex-wrap: wrap; }
-    .col { flex: 1 1 0; min-width: 280px; }
-    textarea, input[type="text"], select { width:100%; box-sizing:border-box; padding:8px; border:1px solid var(--border); border-radius:8px; font: inherit; }
-    button { background:linear-gradient(#3b82f6,#2563eb); color:#fff; border:1px solid #2563eb; border-radius:10px; padding:8px 12px; cursor:pointer; font-weight:600; }
-    button.secondary { background:#f8fafc; color:#0f172a; border:1px solid var(--border); }
-    .muted{ color:#64748b; font-size: 0.95rem; }
-    table { border-collapse: collapse; width:100%; }
-    th, td { border:1px solid var(--border); padding:6px 8px; text-align:left; }
-    .pill { display:inline-block; background:#f1f5f9; border:1px solid var(--border); border-radius:999px; padding:3px 8px; font-size:12px; color:#475569; }
-    .spacer{ height:8px; }
-    .alert{ padding:10px 12px; background:#fff7ed; border:1px solid #ffedd5; color:#9a3412; border-radius:8px; }
-    .success{ padding:10px 12px; background:#ecfdf5; border:1px solid #bbf7d0; color:#065f46; border-radius:8px; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
+{% extends "base.html" %}
+
+{% block title %}Arkivnummer-normalisering - DGB Værktøjer{% endblock %}
+
+{% block content %}
     <h1>🗂️ Arkivnummer-normalisering</h1>
     <p class="muted">Vælg fanen <b>Tekst</b> eller <b>Excel</b> herunder. Regler:
       <span class="pill">":" → 5 cifre før kolon (bogstaver tæller ikke)</span>
@@ -192,9 +166,7 @@ PAGE_HTML = r"""
     {% endif %}
     {% endif %}
 
-  </div>
-</body>
-</html>
+{% endblock %}
 """
 
 # Lille in-memory payload store (single-process). Brug Redis etc. hvis du skal skalere.
@@ -233,8 +205,9 @@ def view():
             if normalized_clean:
                 sara_query = "objektnummer = " + ", ".join(normalized_clean)
 
-        return render_template_string(
-            PAGE_HTML,
+        return render_template(
+            'tekstnormalisering.html',
+            current_page='tekstnormalisering',
             tab="text",
             inp=inp,
             tokens=tokens,
@@ -254,8 +227,14 @@ def view():
             add_mapping = request.form.get("add_mapping", "yes")
             file = request.files.get("excel")
             if not file or file.filename == "":
-                return render_template_string(
-                    PAGE_HTML, tab="excel", preview=None, add_mapping=add_mapping, guessed_col=None, payload_token=None
+                return render_template(
+                    'tekstnormalisering.html', 
+                    current_page='tekstnormalisering',
+                    tab="excel", 
+                    preview=None, 
+                    add_mapping=add_mapping, 
+                    guessed_col=None, 
+                    payload_token=None
                 )
 
             # Læs Excel
@@ -264,8 +243,9 @@ def view():
                 sheet_name = xls.sheet_names[0]
                 df = xls.parse(sheet_name)
             except Exception as e:
-                return render_template_string(
-                    PAGE_HTML,
+                return render_template(
+                    'tekstnormalisering.html',
+                    current_page='tekstnormalisering',
                     tab="excel",
                     preview=f'<div class="alert">Kunne ikke læse Excel: {e}</div>',
                     add_mapping=add_mapping,
@@ -274,8 +254,9 @@ def view():
                 )
 
             if df is None or df.empty:
-                return render_template_string(
-                    PAGE_HTML,
+                return render_template(
+                    'tekstnormalisering.html',
+                    current_page='tekstnormalisering',
                     tab="excel",
                     preview='<div class="alert">Arket ser tomt ud.</div>',
                     add_mapping=add_mapping,
@@ -305,8 +286,9 @@ def view():
             payload_token = _store_payload(buffer.getvalue())
             preview_html = df.head(20).to_html(index=False)
 
-        return render_template_string(
-            PAGE_HTML,
+        return render_template(
+            'tekstnormalisering.html',
+            current_page='tekstnormalisering',
             tab="excel",
             preview=preview_html,
             payload_token=payload_token,

@@ -1,27 +1,19 @@
 # main.py
-from flask import Flask
+from flask import Flask, render_template  
 from pages.tekstnormalisering import tekstnormalisering_bp
+from pages.resizer import resizer_bp
+from pages.Sammenfletter import sammenfletter_bp
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB uploads (juster efter behov)
-app.config["SECRET_KEY"] = "your-secret-key-here-change-in-production"  # Tilføj secret key
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
+app.config["SECRET_KEY"] = "your-secret-key-here-change-in-production"  
 app.register_blueprint(tekstnormalisering_bp, url_prefix="/tekstnormalisering")
+app.register_blueprint(resizer_bp, url_prefix="/resizer")
+app.register_blueprint(sammenfletter_bp, url_prefix="/sammenfletter")
 
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
-    return """\
-    <html>
-      <head><title>Flask app</title></head>
-      <body style="font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 24px;">
-        <h1>Flask app</h1>
-        <p>Værktøjer:</p>
-        <ul>
-          <li><a href="/tekstnormalisering">🗂️ Arkivnummer-normalisering</a></li>
-        </ul>
-      </body>
-    </html>
-    """
+    return render_template("home.html", current_page="home")
 
 if __name__ == "__main__":
-    # Brug host="0.0.0.0" hvis du vil kunne tilgå den fra andre enheder på netværket
     app.run(debug=True)

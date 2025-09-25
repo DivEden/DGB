@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}DGB Værktøjer{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#f8fafc; --panel:#fff; --muted:#475569; --border:#e2e8f0; --accent:#2563eb;
+      --nav-bg:#1e293b; --nav-text:#f1f5f9; --nav-hover:#334155;
+    }
+    * { box-sizing: border-box; }
+    html, body { 
+      background: var(--bg); 
+      color:#0f172a; 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+      margin: 0; 
+      padding: 0;
+    }
+    
+    /* Navigation bar */
+    .navbar {
+      background: var(--nav-bg);
+      padding: 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    
+    .nav-brand {
+      color: var(--nav-text);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1.25rem;
+      padding: 16px 0;
+      margin-right: 32px;
+    }
+    
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex: 1;
+    }
+    
+    .nav-link {
+      color: var(--nav-text);
+      text-decoration: none;
+      padding: 16px 20px;
+      transition: background-color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 0;
+    }
+    
+    .nav-link:hover {
+      background: var(--nav-hover);
+    }
+    
+    .nav-link.active {
+      background: var(--accent);
+    }
+    
+    .nav-external {
+      margin-left: auto;
+    }
+    
+    .nav-external .nav-link {
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+    
+    /* Main content */
+    .wrap { 
+      max-width: 1200px; 
+      margin: 24px auto; 
+      padding: 0 16px; 
+    }
+    
+    .card { 
+      background: var(--panel); 
+      border:1px solid var(--border); 
+      border-radius:12px; 
+      box-shadow: 0 4px 10px rgba(0,0,0,.05); 
+      padding:16px; 
+      margin-bottom:16px; 
+    }
+    
+    h1,h2,h3 { margin: 0 0 8px 0; }
+    
+    .tabs { display:flex; gap:8px; margin-bottom:12px; }
+    .tab a { 
+      display:inline-block; 
+      padding:8px 12px; 
+      border:1px solid var(--border); 
+      border-radius:999px; 
+      text-decoration:none; 
+      color:#0f172a; 
+      background:#f1f5f9; 
+    }
+    .tab a.active { background:#e0e7ff; border-color:#c7d2fe; color:#1d4ed8; }
+    
+    .row { display:flex; gap:16px; flex-wrap: wrap; }
+    .col { flex: 1 1 0; min-width: 280px; }
+    
+    textarea, input[type="text"], select, input[type="file"], input[type="number"] { 
+      width:100%; 
+      box-sizing:border-box; 
+      padding:8px; 
+      border:1px solid var(--border); 
+      border-radius:8px; 
+      font: inherit; 
+    }
+    
+    button { 
+      background:linear-gradient(#3b82f6,#2563eb); 
+      color:#fff; 
+      border:1px solid #2563eb; 
+      border-radius:10px; 
+      padding:8px 12px; 
+      cursor:pointer; 
+      font-weight:600; 
+    }
+    
+    button.secondary { 
+      background:#f8fafc; 
+      color:#0f172a; 
+      border:1px solid var(--border); 
+    }
+    
+    .muted{ color:#64748b; font-size: 0.95rem; }
+    table { border-collapse: collapse; width:100%; }
+    th, td { border:1px solid var(--border); padding:6px 8px; text-align:left; }
+    .pill { 
+      display:inline-block; 
+      background:#f1f5f9; 
+      border:1px solid var(--border); 
+      border-radius:999px; 
+      padding:3px 8px; 
+      font-size:12px; 
+      color:#475569; 
+    }
+    .spacer{ height:8px; }
+    .alert{ 
+      padding:10px 12px; 
+      background:#fff7ed; 
+      border:1px solid #ffedd5; 
+      color:#9a3412; 
+      border-radius:8px; 
+    }
+    .success{ 
+      padding:10px 12px; 
+      background:#ecfdf5; 
+      border:1px solid #bbf7d0; 
+      color:#065f46; 
+      border-radius:8px; 
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .nav-container {
+        flex-wrap: wrap;
+      }
+      .nav-brand {
+        margin-right: 16px;
+      }
+      .nav-links {
+        flex-wrap: wrap;
+      }
+      .nav-link {
+        padding: 12px 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="nav-brand">🛠️ DGB Værktøjer</a>
+      
+      <div class="nav-links">
+        <a href="/tekstnormalisering" class="nav-link {{ 'active' if current_page == 'tekstnormalisering' else '' }}">
+          🗂️ Arkivnummer
+        </a>
+        <a href="/resizer" class="nav-link {{ 'active' if current_page == 'resizer' else '' }}">
+          🖼️ Resizer
+        </a>
+        <a href="/sammenfletter" class="nav-link {{ 'active' if current_page == 'sammenfletter' else '' }}">
+          📋 Sammenfletning
+        </a>
+        
+        <div class="nav-external">
+          <a href="https://github.com/DivEden/DGB" target="_blank" class="nav-link">
+            🐙 GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>
