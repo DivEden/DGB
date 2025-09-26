@@ -32,8 +32,8 @@ def _pop_image(token: str) -> Optional[bytes]:
 def _get_group_data(token: str) -> Optional[Dict]:
     return _GROUP_STORE.get(token, None)
 
-def create_thumbnail(image_data: bytes, max_size: int = 300) -> bytes:
-    """Create a thumbnail version of the image"""
+def create_thumbnail(image_data: bytes, max_size_kb: int = 300) -> bytes:
+    """Create a compressed thumbnail with size limit in KB - aims for target size"""
     image = Image.open(io.BytesIO(image_data))
     
     # Convert to RGB if necessary (for PNG with transparency, etc.)
@@ -44,20 +44,60 @@ def create_thumbnail(image_data: bytes, max_size: int = 300) -> bytes:
     elif image.mode != 'RGB':
         image = image.convert('RGB')
     
-    # Calculate new size maintaining aspect ratio
-    image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+    # Don't resize immediately - try to get target KB size first
+    temp_image = image.copy()
+    quality = 95
     
-    # Save as JPEG
+    # Binary search-like approach for better KB targeting
+    for attempt in range(12):
+        output = io.BytesIO()
+        temp_image.save(output, format='JPEG', quality=quality, optimize=True)
+        size_kb = len(output.getvalue()) / 1024
+        
+        # If we're close to target (within 15%), accept it
+        if size_kb <= max_size_kb and size_kb >= max_size_kb * 0.75:
+            output.seek(0)
+            return output.getvalue()
+        elif size_kb <= max_size_kb:
+            # Too small, try higher quality if possible
+            if quality < 95:
+                quality = min(95, quality + 5)
+            else:
+                # Already at max quality, accept result
+                output.seek(0)
+                return output.getvalue()
+        else:
+            # Too big, reduce quality more gradually
+            if quality > 70:
+                quality -= 5
+            else:
+                quality -= 10
+        
+        # If quality gets very low, resize image and reset quality
+        if quality <= 40 and max(temp_image.size) > 600:
+            ratio = 0.85
+            new_size = (int(temp_image.width * ratio), int(temp_image.height * ratio))
+            temp_image = image.resize(new_size, Image.Resampling.LANCZOS)
+            quality = 85
+            image = temp_image  # Update reference for next resize if needed
+    
+    # Final save
     output = io.BytesIO()
-    image.save(output, format='JPEG', quality=85, optimize=True)
+    temp_image.save(output, format='JPEG', quality=quality, optimize=True)
     output.seek(0)
     return output.getvalue()
 
-def resize_image(image_data: bytes, max_size: int = 1920) -> bytes:
-    """Resize image if it's larger than max_size"""
+def resize_image(image_data: bytes, max_size: int = None) -> bytes:
+    """ONLY rename/format convert - NO resizing or quality loss for large images"""
+    # For large images, we want to preserve EVERYTHING - just ensure JPEG format
     image = Image.open(io.BytesIO(image_data))
     
-    # Convert to RGB if necessary
+    # Only convert format if absolutely necessary
+    if image.format == 'JPEG' and image.mode == 'RGB':
+        # Already perfect format, return original data unchanged
+        return image_data
+    
+    # Only convert to RGB if necessary (for format consistency)
     if image.mode in ('RGBA', 'LA'):
         background = Image.new('RGB', image.size, (255, 255, 255))
         background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
@@ -65,16 +105,9 @@ def resize_image(image_data: bytes, max_size: int = 1920) -> bytes:
     elif image.mode != 'RGB':
         image = image.convert('RGB')
     
-    # Only resize if image is larger than max_size
-    if max(image.size) > max_size:
-        # Calculate new size maintaining aspect ratio
-        ratio = min(max_size / image.width, max_size / image.height)
-        new_size = (int(image.width * ratio), int(image.height * ratio))
-        image = image.resize(new_size, Image.Resampling.LANCZOS)
-    
-    # Save as JPEG
+    # Save with absolute maximum quality and no optimization
     output = io.BytesIO()
-    image.save(output, format='JPEG', quality=95, optimize=True)
+    image.save(output, format='JPEG', quality=100, optimize=False)
     output.seek(0)
     return output.getvalue()
 
@@ -117,9 +150,8 @@ def handle_form_submission():
         import json
         groups = json.loads(groups_data)
         
-        # Get settings
-        small_max_size = int(request.form.get('small_max_size', 300))
-        large_max_size = int(request.form.get('large_max_size', 1920))
+        # Get settings (only small image settings needed)
+        small_max_size_kb = int(request.form.get('small_max_size', 300))  # KB now
         use_aab_prefix = request.form.get('use_aab_prefix') == 'on'
         
         # Store uploaded files data
@@ -143,30 +175,27 @@ def handle_form_submission():
                 if image_index < len(uploaded_files):
                     image_data = uploaded_files[image_index]
                     
-                    # Generate filename
-                    base_name = f"AAB {group_name} {letter}" if use_aab_prefix else f"{group_name} {letter}"
+                    # Generate filename (same for both versions)
+                    filename = f"AAB {group_name} {letter}.jpg" if use_aab_prefix else f"{group_name} {letter}.jpg"
                     
-                    # Create small version
-                    small_image = create_thumbnail(image_data, small_max_size)
-                    small_filename = f"{base_name}_small.jpg"
+                    # Create small version (compressed by KB)
+                    small_image = create_thumbnail(image_data, small_max_size_kb)
                     small_token = _store_image(small_image)
                     
-                    # Create large version
-                    large_image = resize_image(image_data, large_max_size)
-                    large_filename = f"{base_name}.jpg"
+                    # Create large version (original quality, no resize)
+                    large_image = resize_image(image_data)  # No max_size parameter
                     large_token = _store_image(large_image)
                     
                     processed_files.append({
-                        'small': {'token': small_token, 'filename': small_filename},
-                        'large': {'token': large_token, 'filename': large_filename}
+                        'small': {'token': small_token, 'filename': filename},
+                        'large': {'token': large_token, 'filename': filename}
                     })
         
         # Store processed data for download
         group_token = _store_group_data({
             'files': processed_files,
             'settings': {
-                'small_max_size': small_max_size,
-                'large_max_size': large_max_size,
+                'small_max_size_kb': small_max_size_kb,
                 'use_aab_prefix': use_aab_prefix
             }
         })
