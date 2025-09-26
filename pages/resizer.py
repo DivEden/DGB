@@ -10,7 +10,7 @@ import base64
 
 resizer_bp = Blueprint("resizer", __name__)
 
-# Simple in-memory store for image data (use Redis in production)
+# Simpel in-memory lager for billeder (brug Redis i produktion)
 _IMAGE_STORE: Dict[str, bytes] = {}
 _GROUP_STORE: Dict[str, Dict] = {}
 
@@ -36,7 +36,7 @@ def create_thumbnail(image_data: bytes, max_size_kb: int = 300) -> bytes:
     """Create a compressed thumbnail with size limit in KB - aims for target size"""
     image = Image.open(io.BytesIO(image_data))
     
-    # Convert to RGB if necessary (for PNG with transparency, etc.)
+    # konverter til RGB (for PNG with transparency, etc.)
     if image.mode in ('RGBA', 'LA'):
         background = Image.new('RGB', image.size, (255, 255, 255))
         background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
@@ -44,44 +44,43 @@ def create_thumbnail(image_data: bytes, max_size_kb: int = 300) -> bytes:
     elif image.mode != 'RGB':
         image = image.convert('RGB')
     
-    # Don't resize immediately - try to get target KB size first
+    # Klap hesten med resize - først prøves der at ramme KB mål
     temp_image = image.copy()
     quality = 95
     
-    # Binary search-like approach for better KB targeting
     for attempt in range(12):
         output = io.BytesIO()
         temp_image.save(output, format='JPEG', quality=quality, optimize=True)
         size_kb = len(output.getvalue()) / 1024
         
-        # If we're close to target (within 15%), accept it
+        # Hvis inden 15% - accepter det
         if size_kb <= max_size_kb and size_kb >= max_size_kb * 0.75:
             output.seek(0)
             return output.getvalue()
         elif size_kb <= max_size_kb:
-            # Too small, try higher quality if possible
+            # prøv højere kvalitet hvis muligt
             if quality < 95:
                 quality = min(95, quality + 5)
             else:
-                # Already at max quality, accept result
+                # allerede maks? accepter resultat
                 output.seek(0)
                 return output.getvalue()
         else:
-            # Too big, reduce quality more gradually
+            # gør kvalitet lavere mere gradvist
             if quality > 70:
                 quality -= 5
             else:
                 quality -= 10
         
-        # If quality gets very low, resize image and reset quality
+        # hvis kvalitet er meget lav, resize billede og reset kvalitet
         if quality <= 40 and max(temp_image.size) > 600:
             ratio = 0.85
             new_size = (int(temp_image.width * ratio), int(temp_image.height * ratio))
             temp_image = image.resize(new_size, Image.Resampling.LANCZOS)
             quality = 85
-            image = temp_image  # Update reference for next resize if needed
+            image = temp_image  # Update
     
-    # Final save
+    # Det endelige save - lav hele det område her om, både over og under
     output = io.BytesIO()
     temp_image.save(output, format='JPEG', quality=quality, optimize=True)
     output.seek(0)
@@ -89,15 +88,15 @@ def create_thumbnail(image_data: bytes, max_size_kb: int = 300) -> bytes:
 
 def resize_image(image_data: bytes, max_size: int = None) -> bytes:
     """ONLY rename/format convert - NO resizing or quality loss for large images"""
-    # For large images, we want to preserve EVERYTHING - just ensure JPEG format
+    # STORE BILLEDER SKAL IKKE PILLES VED (:
     image = Image.open(io.BytesIO(image_data))
     
-    # Only convert format if absolutely necessary
+    # rgb konvertering (for PNG with transparency, etc.)
     if image.format == 'JPEG' and image.mode == 'RGB':
-        # Already perfect format, return original data unchanged
+        # allerede formateret? perfekt, returner original data uændret
         return image_data
     
-    # Only convert to RGB if necessary (for format consistency)
+    
     if image.mode in ('RGBA', 'LA'):
         background = Image.new('RGB', image.size, (255, 255, 255))
         background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
@@ -105,7 +104,7 @@ def resize_image(image_data: bytes, max_size: int = None) -> bytes:
     elif image.mode != 'RGB':
         image = image.convert('RGB')
     
-    # Save with absolute maximum quality and no optimization
+    # gem med absolut maksimum kvalitet og ingen optimering
     output = io.BytesIO()
     image.save(output, format='JPEG', quality=100, optimize=False)
     output.seek(0)
@@ -127,20 +126,20 @@ def view():
     if request.method == "GET":
         return render_template('resizer.html', current_page='resizer')
     
-    # Handle form submission for processing groups
+    # ærlig talt pas
     return handle_form_submission()
 
 def handle_form_submission():
     """Handle form submission for processing groups"""
     try:
-        # Get uploaded files
+        # hent uploadede filer
         files = request.files.getlist('images')
         if not files:
             return render_template('resizer.html', 
                                  current_page='resizer',
                                  error='Ingen billeder uploadet')
         
-        # Get form data
+        # hent grupper data
         groups_data = request.form.get('groups_data')
         if not groups_data:
             return render_template('resizer.html', 
@@ -150,39 +149,39 @@ def handle_form_submission():
         import json
         groups = json.loads(groups_data)
         
-        # Get settings (only small image settings needed)
+        # hent settings (only small image settings needed)
         small_max_size_kb = int(request.form.get('small_max_size', 300))  # KB now
         use_aab_prefix = request.form.get('use_aab_prefix') == 'on'
         
-        # Store uploaded files data
+        # gem lidt data osv
         uploaded_files = []
         for file in files:
             if file and file.filename:
                 image_data = file.read()
                 uploaded_files.append(image_data)
         
-        # Process all groups
+        
         processed_files = []
         
         for group in groups:
             group_name = group.get('name', 'unnamed')
             image_indices = group.get('images', [])
             
-            # Generate filenames for this group
+            # Filnavne: AAB <gruppenavn> a.jpg, AAB <gruppenavn> b.jpg, ... eller uden AAB
             letters = [chr(97 + i) for i in range(len(image_indices))]  # a, b, c, ...
             
             for i, (image_index, letter) in enumerate(zip(image_indices, letters)):
                 if image_index < len(uploaded_files):
                     image_data = uploaded_files[image_index]
                     
-                    # Generate filename (same for both versions)
+                    # Filnavne (same for both versions)
                     filename = f"AAB {group_name} {letter}.jpg" if use_aab_prefix else f"{group_name} {letter}.jpg"
                     
-                    # Create small version (compressed by KB)
+                    # Små versioner (komprimeret efter KB)
                     small_image = create_thumbnail(image_data, small_max_size_kb)
                     small_token = _store_image(small_image)
                     
-                    # Create large version (original quality, no resize)
+                    # Store version (original kvalitet, ingen resize)
                     large_image = resize_image(image_data)  # No max_size parameter
                     large_token = _store_image(large_image)
                     
@@ -191,7 +190,7 @@ def handle_form_submission():
                         'large': {'token': large_token, 'filename': filename}
                     })
         
-        # Store processed data for download
+        # gem gruppe data (til download senere)
         group_token = _store_group_data({
             'files': processed_files,
             'settings': {
@@ -223,18 +222,18 @@ def download_zip():
         if not group_data:
             return "Token udløbet eller ugyldigt", 410
         
-        # Create ZIP file in memory
+        # Zip it up
         zip_buffer = io.BytesIO()
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Add all processed files to ZIP
+            
             for file_pair in group_data['files']:
-                # Add small version
+                # Tilføj de små
                 small_data = _pop_image(file_pair['small']['token'])
                 if small_data:
                     zip_file.writestr(f"small/{file_pair['small']['filename']}", small_data)
                 
-                # Add large version
+                # Også de store
                 large_data = _pop_image(file_pair['large']['token'])
                 if large_data:
                     zip_file.writestr(f"large/{file_pair['large']['filename']}", large_data)

@@ -26,7 +26,7 @@ def normalize_token(token: str) -> str:
     if not s:
         return s
 
-    # x/X-regel: 4 cifre på hver side (ingen kolon til stede)
+    # x/X-regel: 4 cifre på hver side (ingen kolon til stede).
     if ("x" in s or "X" in s) and ":" not in s:
         parts = re.split(r"[xX]", s, maxsplit=1)
         if len(parts) == 2:

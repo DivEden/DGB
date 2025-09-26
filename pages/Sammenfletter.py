@@ -58,7 +58,7 @@ def view():
     if request.method == "GET":
         return render_template('sammenfletter.html', current_page='sammenfletter')
     
-    # Handle file uploads and processing
+    # Fil upload og processing
     export_file = request.files.get('export_file')
     other_file = request.files.get('other_file')
     
@@ -67,7 +67,7 @@ def view():
                              current_page='sammenfletter',
                              error="Begge filer skal uploades")
     
-    # Get form parameters
+    # Hent form parameters
     norm_trim = request.form.get('norm_trim') == 'on'
     norm_lower = request.form.get('norm_lower') == 'on'
     norm_remove_punct = request.form.get('norm_remove_punct') == 'on'
@@ -85,12 +85,12 @@ def view():
                                  current_page='sammenfletter',
                                  error="En eller begge filer er tomme")
         
-        # Guess columns
+        # Gætteleg (prøver at finde de rigtige kolonner)
         exp_key_col = guess_key_col(df_export)
         exp_title_col = guess_title_col(df_export)
         oth_key_col = guess_key_col(df_other)
         
-        # Allow user to override column selection
+        # Brugere skal have mulighed for at tilsidesætte kolonnevalg
         exp_key_col = request.form.get('exp_key_col', exp_key_col)
         exp_title_col = request.form.get('exp_title_col', exp_title_col)
         oth_key_col = request.form.get('oth_key_col', oth_key_col)
@@ -103,7 +103,7 @@ def view():
         export_data = base64.b64encode(pickle.dumps(df_export)).decode('utf-8')
         other_data = base64.b64encode(pickle.dumps(df_other)).decode('utf-8')
         
-        # If this is just column selection step, show preview
+        # Preview data
         if request.form.get('action') == 'select_columns':
             return render_template('sammenfletter.html',
                                  current_page='sammenfletter',
@@ -135,7 +135,7 @@ def view():
                 df_export = pickle.loads(base64.b64decode(export_data.encode('utf-8')))
                 df_other = pickle.loads(base64.b64decode(other_data.encode('utf-8')))
         
-        # Process the merge
+        # Process sammenfletning
         mapping_full = {}
         mapping_base = {}
         
@@ -147,14 +147,14 @@ def view():
                 if use_base_key:
                     mapping_base.setdefault(base_key(key), str(title))
         
-        # Apply mapping
+        # Mapping
         result = df_other.copy()
         normalized_keys = df_other[oth_key_col].apply(
             lambda x: norm_cell(x, norm_trim, norm_lower, norm_remove_punct, norm_collapse_ws, norm_fix_float)
         )
         title_series = normalized_keys.map(mapping_full)
         
-        # Apply base key fallback if enabled
+        # Key fallback
         if use_base_key:
             missing_mask = title_series.isna()
             if missing_mask.any():
@@ -162,16 +162,16 @@ def view():
                     lambda x: mapping_base.get(base_key(x), None)
                 )
         
-        # Insert title column after key column
+        # indsæt titler i resultat
         insert_at = result.columns.get_loc(oth_key_col) + 1
         result.insert(insert_at, "Titel (fra export)", title_series)
         
-        # Statistics
+        # stats
         total = len(result)
         matched = result["Titel (fra export)"].notna().sum()
         unmatched = total - matched
         
-        # Store result for download
+        # Gem resultat til download
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
             result.to_excel(writer, index=False, sheet_name='Flettet')
