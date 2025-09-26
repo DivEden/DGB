@@ -139,6 +139,79 @@
       border:1px solid var(--border); 
     }
     
+    .button {
+      background:linear-gradient(#3b82f6,#2563eb); 
+      color:#fff !important; 
+      border:1px solid #2563eb; 
+      border-radius:10px; 
+      padding:8px 12px; 
+      cursor:pointer; 
+      font-weight:600;
+      text-decoration: none;
+      display: inline-block;
+    }
+    
+    .button:hover {
+      background:linear-gradient(#2563eb,#1d4ed8);
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    
+    label input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+    }
+    
+    details {
+      margin: 16px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0;
+    }
+    
+    details summary {
+      padding: 12px;
+      cursor: pointer;
+      background: #f8fafc;
+      border-radius: 8px 8px 0 0;
+      font-weight: 500;
+    }
+    
+    details[open] summary {
+      border-bottom: 1px solid var(--border);
+      border-radius: 8px 8px 0 0;
+    }
+    
+    details > div {
+      padding: 16px;
+    }
+    
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0;
+    }
+    
+    .table th,
+    .table td {
+      border: 1px solid var(--border);
+      padding: 8px;
+      text-align: left;
+    }
+    
+    .table th {
+      background: #f8fafc;
+      font-weight: 600;
+    }
+    
+    .table-striped tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    
     .muted{ color:#64748b; font-size: 0.95rem; }
     table { border-collapse: collapse; width:100%; }
     th, td { border:1px solid var(--border); padding:6px 8px; text-align:left; }

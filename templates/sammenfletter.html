@@ -3,9 +3,158 @@
 {% block title %}Sammenfletter - DGB Værktøjer{% endblock %}
 
 {% block content %}
-    <h1>📋 Sammenfletter</h1>
+    <h1>� Flet objektnumre med titler</h1>
+    <p class="muted">Matcher robustere: ignorerer mellemrum/tegnsætning/case og kan matche på 'basis-nøgle' (prefix + første tal-blok).</p>
+
+    {% if error %}
     <div class="card">
-        <p>Sammenfletter-værktøj kommer snart...</p>
-        <p class="muted">Dette værktøj vil give mulighed for at sammenflette filer og dokumenter.</p>
+        <div class="alert">{{ error }}</div>
     </div>
+    {% endif %}
+
+    {% if not step %}
+    <!-- Step 1: File upload and settings -->
+    <div class="card">
+        <h2>Upload filer og indstillinger</h2>
+        <form method="post" enctype="multipart/form-data">
+            <div class="row">
+                <div class="col">
+                    <h3>1) Upload export.xlsx (arkiv)</h3>
+                    <label for="export_file">Vælg export fil:</label>
+                    <input type="file" id="export_file" name="export_file" accept=".xlsx,.xls" required />
+                </div>
+                <div class="col">
+                    <h3>2) Upload andet dokument (objektnumre)</h3>
+                    <label for="other_file">Vælg andet dokument:</label>
+                    <input type="file" id="other_file" name="other_file" accept=".xlsx,.xls" required />
+                </div>
+            </div>
+
+            <div class="spacer"></div>
+            
+            <h3>⚙️ Normaliseringsindstillinger</h3>
+            <div class="row">
+                <div class="col">
+                    <label>
+                        <input type="checkbox" name="norm_trim" checked /> Trim mellemrum
+                    </label><br>
+                    <label>
+                        <input type="checkbox" name="norm_lower" checked /> Lowercase
+                    </label><br>
+                    <label>
+                        <input type="checkbox" name="norm_remove_punct" checked /> Fjern tegnsætning
+                        <span class="muted">(Fjerner fx .,;:/- mv. fra nøglen)</span>
+                    </label>
+                </div>
+                <div class="col">
+                    <label>
+                        <input type="checkbox" name="norm_collapse_ws" checked /> Sammenflet flere mellemrum
+                    </label><br>
+                    <label>
+                        <input type="checkbox" name="norm_fix_float" checked /> Fjern .0 / ,0 fra heltal
+                    </label><br>
+                    <label>
+                        <input type="checkbox" name="use_base_key" checked /> Fallback: 'basis-nøgle' (prefix + første tal-blok)
+                        <span class="muted">(Hjælper ved delnumre som -1, .1, a, etc.)</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="spacer"></div>
+            <input type="hidden" name="action" value="select_columns" />
+            <button type="submit">Fortsæt til kolonnevalg</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if step == 'column_selection' %}
+    <!-- Step 2: Column selection -->
+    <div class="card">
+        <h2>3) Forhåndsvisning og kolonnevalg</h2>
+        
+        <h3>Export fil ({{ df_export_preview|length if df_export_preview else 0 }} rækker)</h3>
+        {{ df_export_preview|safe }}
+        
+        <h3>Andet dokument ({{ df_other_preview|length if df_other_preview else 0 }} rækker)</h3>
+        {{ df_other_preview|safe }}
+
+        <form method="post" enctype="multipart/form-data">
+            <div class="row">
+                <div class="col">
+                    <label for="exp_key_col">EXPORT — objektnummer kolonne:</label>
+                    <select id="exp_key_col" name="exp_key_col">
+                        {% for col in export_columns %}
+                        <option value="{{ col }}" {% if col == exp_key_col %}selected{% endif %}>{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                    
+                    <label for="exp_title_col">EXPORT — titel kolonne:</label>
+                    <select id="exp_title_col" name="exp_title_col">
+                        {% for col in export_columns %}
+                        <option value="{{ col }}" {% if col == exp_title_col %}selected{% endif %}>{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col">
+                    <label for="oth_key_col">ANDET — objektnummer kolonne:</label>
+                    <select id="oth_key_col" name="oth_key_col">
+                        {% for col in other_columns %}
+                        <option value="{{ col }}" {% if col == oth_key_col %}selected{% endif %}>{{ col }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Hidden settings from previous step -->
+            {% for key, value in settings.items() %}
+                {% if value %}
+                <input type="hidden" name="{{ key }}" value="on" />
+                {% endif %}
+            {% endfor %}
+            
+            <!-- Hidden data fields -->
+            <input type="hidden" name="export_data" value="{{ export_data }}" />
+            <input type="hidden" name="other_data" value="{{ other_data }}" />
+
+            <div class="spacer"></div>
+            <input type="hidden" name="action" value="process" />
+            <button type="submit">Kør fletning</button>
+        </form>
+    </div>
+    {% endif %}
+
+    {% if step == 'results' %}
+    <!-- Step 3: Results -->
+    <div class="card">
+        <h2>4) Resultat</h2>
+        <div class="success">
+            Matchede {{ matched }} af {{ total }} rækker. {{ unmatched }} uden match.
+        </div>
+        
+        <h3>Resultat (første 20 rækker)</h3>
+        {{ result_preview|safe }}
+        
+        {% if unmatched > 0 %}
+        <details>
+            <summary><strong>Vis rækker uden match ({{ unmatched }} rækker)</strong></summary>
+            {{ unmatched_preview|safe }}
+        </details>
+        {% endif %}
+
+        <div class="spacer"></div>
+        <div class="row">
+            <div class="col">
+                <a href="{{ url_for('sammenfletter.download', token=file_token) }}" class="button">
+                    ⬇️ Download Excel
+                </a>
+            </div>
+            <div class="col">
+                <a href="{{ url_for('sammenfletter.view') }}" class="button" style="background: #6c757d;">
+                    🔄 Start forfra
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
 {% endblock %}

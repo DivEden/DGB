@@ -1,11 +1,632 @@
 {% extends "base.html" %}
 
-{% block title %}Resizer - DGB Værktøjer{% endblock %}
+{% block title %}Billedbehandling - DGB Værktøjer{% endblock %}
 
 {% block content %}
-    <h1>🖼️ Resizer</h1>
+    <h1>🖼️ Billedbehandling og gruppering</h1>
+    <p class="muted">Upload mange billeder og organiser dem i grupper med automatisk omdøbning og størrelsestilpasning.</p>
+
+    {% if error %}
     <div class="card">
-        <p>Resizer-værktøj kommer snart...</p>
-        <p class="muted">Dette værktøj vil give mulighed for at ændre størrelse på billeder og filer.</p>
+        <div class="alert">{{ error }}</div>
     </div>
+    {% endif %}
+
+    {% if not step %}
+    <!-- Step 1: Upload and organize -->
+    <div class="card">
+        <h2>1. Upload billeder</h2>
+        <div class="upload-area" id="upload-area">
+            <div class="upload-placeholder">
+                <p>📁 Træk billeder hertil eller klik for at vælge</p>
+                <input type="file" id="file-input" multiple accept="image/*" style="display: none;">
+                <button type="button" onclick="document.getElementById('file-input').click()">Vælg billeder</button>
+            </div>
+        </div>
+        
+        <div id="uploaded-images" class="uploaded-images-grid" style="display: none;">
+            <h3>Uploadede billeder</h3>
+            <div id="image-thumbnails" class="image-thumbnails"></div>
+        </div>
+    </div>
+
+    <div class="card" id="grouping-section" style="display: none;">
+        <h2>2. Organiser i grupper</h2>
+        <p class="muted">Træk billeder ind i grupper og navngiv dem. Hvert billede får automatisk bogstav-suffikser (a, b, c, ...).</p>
+        
+        <div class="group-controls">
+            <button type="button" id="add-group-btn">+ Tilføj ny gruppe</button>
+            <button type="button" id="auto-group-btn">Auto-grupper (4 ad gangen)</button>
+        </div>
+        
+        <div id="groups-container" class="groups-container"></div>
+        
+        <div class="settings-section">
+            <h3>3. Indstillinger</h3>
+            <div class="row">
+                <div class="col">
+                    <label for="small-size">Maksimal størrelse (små billeder):</label>
+                    <input type="number" id="small-size" value="300" min="100" max="800" step="50"> px
+                </div>
+                <div class="col">
+                    <label for="large-size">Maksimal størrelse (store billeder):</label>
+                    <input type="number" id="large-size" value="1920" min="800" max="4000" step="100"> px
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <label>
+                        <input type="checkbox" id="use-aab-prefix" checked> Brug "AAB" prefix
+                        <span class="muted">(eks: "AAB 1234x1234 a" i stedet for "1234x1234 a")</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="spacer"></div>
+        <button type="button" id="process-btn" class="process-button" disabled>Behandl billeder</button>
+    </div>
+    {% endif %}
+
+    {% if step == 'results' %}
+    <!-- Step 3: Results -->
+    <div class="card">
+        <h2>✅ Billeder behandlet!</h2>
+        <div class="success">
+            {{ processed_count }} billedpar blev behandlet og organiseret.
+        </div>
+        
+        <p>Hver gruppe indeholder:</p>
+        <ul>
+            <li><strong>Små billeder</strong> - Optimeret til forhåndsvisning</li>
+            <li><strong>Store billeder</strong> - Hovedversioner med højere kvalitet</li>
+        </ul>
+        
+        <div class="spacer"></div>
+        <div class="row">
+            <div class="col">
+                <a href="{{ url_for('resizer.download_zip', token=group_token) }}" class="button">
+                    📦 Download alle billeder (ZIP)
+                </a>
+            </div>
+            <div class="col">
+                <a href="{{ url_for('resizer.view') }}" class="button" style="background: #6c757d;">
+                    🔄 Start forfra
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+<style>
+/* Upload area styling */
+.upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 40px;
+    text-align: center;
+    background: #f8fafc;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.upload-area:hover, .upload-area.dragover {
+    border-color: var(--accent);
+    background: #e0e7ff;
+}
+
+.upload-placeholder p {
+    font-size: 1.1rem;
+    color: var(--muted);
+    margin: 0 0 16px 0;
+}
+
+/* Image thumbnails grid */
+.image-thumbnails {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.image-thumb {
+    position: relative;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: grab;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.image-thumb:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.image-thumb img {
+    width: 100%;
+    height: 100px;
+    object-fit: cover;
+    display: block;
+}
+
+.image-thumb .info {
+    padding: 4px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-align: center;
+    background: rgba(255,255,255,0.9);
+}
+
+/* Groups styling */
+.group-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.groups-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 200px;
+}
+
+.group-item {
+    border: 2px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 16px;
+    background: #f1f5f9;
+    transition: all 0.3s ease;
+}
+
+.group-item.drag-over {
+    border-color: var(--accent);
+    background: #e0e7ff;
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.group-header input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.group-header .delete-group {
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.group-images {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
+    min-height: 60px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    background: white;
+}
+
+.group-images.empty::after {
+    content: "Træk billeder hertil";
+    color: var(--muted);
+    font-size: 0.9rem;
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 20px;
+}
+
+.group-image {
+    position: relative;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: white;
+}
+
+.group-image img {
+    width: 100%;
+    height: 60px;
+    object-fit: cover;
+    display: block;
+}
+
+.group-image .letter-label {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: bold;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.group-image .remove-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Settings section */
+.settings-section {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+}
+
+.process-button {
+    background: linear-gradient(#10b981, #059669);
+    color: white;
+    border: 1px solid #059669;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.process-button:disabled {
+    background: #94a3b8;
+    border-color: #94a3b8;
+    cursor: not-allowed;
+}
+
+.process-button:not(:disabled):hover {
+    background: linear-gradient(#059669, #047857);
+}
+
+/* Dragging states */
+.dragging {
+    opacity: 0.5;
+    transform: rotate(5deg);
+}
+
+.drop-zone-active {
+    border-color: var(--accent) !important;
+    background: #e0e7ff !important;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('file-input');
+    const uploadArea = document.getElementById('upload-area');
+    const uploadedImages = document.getElementById('uploaded-images');
+    const imageThumbnails = document.getElementById('image-thumbnails');
+    const groupingSection = document.getElementById('grouping-section');
+    const groupsContainer = document.getElementById('groups-container');
+    const processBtn = document.getElementById('process-btn');
+    
+    let uploadedImageData = [];
+    let groups = [];
+    let draggedElement = null;
+
+    // File upload handling
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', handleDragOver);
+    uploadArea.addEventListener('drop', handleDrop);
+    fileInput.addEventListener('change', handleFileSelect);
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = Array.from(e.dataTransfer.files);
+        uploadFiles(files);
+    }
+
+    function handleFileSelect(e) {
+        const files = Array.from(e.target.files);
+        uploadFiles(files);
+    }
+
+    function uploadFiles(files) {
+        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+        if (imageFiles.length === 0) {
+            alert('Kun billedfiler er tilladt');
+            return;
+        }
+
+        // Process each file
+        imageFiles.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imageData = {
+                    file: file,
+                    src: e.target.result,
+                    name: file.name,
+                    size: file.size
+                };
+                uploadedImageData.push(imageData);
+                displayUploadedImage(imageData, uploadedImageData.length - 1);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Show uploaded images section
+        uploadedImages.style.display = 'block';
+        groupingSection.style.display = 'block';
+    }
+
+    function displayUploadedImage(imageData, index) {
+        const thumb = document.createElement('div');
+        thumb.className = 'image-thumb';
+        thumb.draggable = true;
+        thumb.dataset.imageIndex = index;
+        
+        thumb.innerHTML = `
+            <img src="${imageData.src}" alt="${imageData.name}">
+            <div class="info">${imageData.name}</div>
+        `;
+
+        thumb.addEventListener('dragstart', function(e) {
+            draggedElement = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.outerHTML);
+        });
+
+        thumb.addEventListener('dragend', function() {
+            this.classList.remove('dragging');
+            draggedElement = null;
+        });
+
+        imageThumbnails.appendChild(thumb);
+    }
+
+    // Group management
+    document.getElementById('add-group-btn').addEventListener('click', () => addGroup());
+    document.getElementById('auto-group-btn').addEventListener('click', () => createAutoGroups());
+
+    function addGroup(name = '') {
+        const groupId = 'group-' + Date.now();
+        const group = {
+            id: groupId,
+            name: name || `Gruppe ${groups.length + 1}`,
+            images: []
+        };
+        groups.push(group);
+
+        const groupElement = createGroupElement(group);
+        groupsContainer.appendChild(groupElement);
+        
+        updateProcessButton();
+        return groupElement;
+    }
+
+    function createGroupElement(group) {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'group-item';
+        groupDiv.dataset.groupId = group.id;
+        
+        groupDiv.innerHTML = `
+            <div class="group-header">
+                <input type="text" value="${group.name}" placeholder="Gruppenavn (fx: 1234x1234)">
+                <button type="button" class="delete-group">Slet</button>
+            </div>
+            <div class="group-images empty" data-group-id="${group.id}"></div>
+        `;
+
+        // Event listeners
+        const nameInput = groupDiv.querySelector('input');
+        nameInput.addEventListener('input', function() {
+            group.name = this.value;
+            updateProcessButton();
+        });
+
+        const deleteBtn = groupDiv.querySelector('.delete-group');
+        deleteBtn.addEventListener('click', function() {
+            deleteGroup(group.id);
+        });
+
+        const dropZone = groupDiv.querySelector('.group-images');
+        setupDropZone(dropZone, group);
+
+        return groupDiv;
+    }
+
+    function setupDropZone(dropZone, group) {
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('drop-zone-active');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+            this.classList.remove('drop-zone-active');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('drop-zone-active');
+            
+            if (draggedElement) {
+                const imageIndex = parseInt(draggedElement.dataset.imageIndex);
+                addImageToGroup(group, imageIndex);
+                draggedElement.remove();
+            }
+        });
+    }
+
+    function addImageToGroup(group, imageIndex) {
+        const imageData = uploadedImageData[imageIndex];
+        group.images.push(imageIndex);
+        
+        const groupImages = document.querySelector(`[data-group-id="${group.id}"]`);
+        groupImages.classList.remove('empty');
+        
+        const imageDiv = document.createElement('div');
+        imageDiv.className = 'group-image';
+        imageDiv.innerHTML = `
+            <img src="${imageData.src}" alt="${imageData.name}">
+            <div class="letter-label">${String.fromCharCode(97 + group.images.length - 1)}</div>
+            <button type="button" class="remove-btn" onclick="removeImageFromGroup('${group.id}', ${group.images.length - 1})">×</button>
+        `;
+        
+        groupImages.appendChild(imageDiv);
+        updateProcessButton();
+    }
+
+    window.removeImageFromGroup = function(groupId, imageIndexInGroup) {
+        const group = groups.find(g => g.id === groupId);
+        if (group) {
+            group.images.splice(imageIndexInGroup, 1);
+            refreshGroupImages(group);
+            updateProcessButton();
+        }
+    };
+
+    function refreshGroupImages(group) {
+        const groupImages = document.querySelector(`[data-group-id="${group.id}"]`);
+        groupImages.innerHTML = '';
+        
+        if (group.images.length === 0) {
+            groupImages.classList.add('empty');
+        } else {
+            groupImages.classList.remove('empty');
+            group.images.forEach((imageIndex, i) => {
+                const imageData = uploadedImageData[imageIndex];
+                const imageDiv = document.createElement('div');
+                imageDiv.className = 'group-image';
+                imageDiv.innerHTML = `
+                    <img src="${imageData.src}" alt="${imageData.name}">
+                    <div class="letter-label">${String.fromCharCode(97 + i)}</div>
+                    <button type="button" class="remove-btn" onclick="removeImageFromGroup('${group.id}', ${i})">×</button>
+                `;
+                groupImages.appendChild(imageDiv);
+            });
+        }
+    }
+
+    function deleteGroup(groupId) {
+        groups = groups.filter(g => g.id !== groupId);
+        const groupElement = document.querySelector(`[data-group-id="${groupId}"]`).parentElement;
+        groupElement.remove();
+        updateProcessButton();
+    }
+
+    function createAutoGroups() {
+        const availableImages = [];
+        for (let i = 0; i < uploadedImageData.length; i++) {
+            const isUsed = groups.some(g => g.images.includes(i));
+            if (!isUsed) {
+                availableImages.push(i);
+            }
+        }
+
+        // Create groups of 4
+        for (let i = 0; i < availableImages.length; i += 4) {
+            const groupImages = availableImages.slice(i, i + 4);
+            const group = {
+                id: 'group-' + Date.now() + '-' + i,
+                name: `Auto-gruppe ${Math.floor(i / 4) + 1}`,
+                images: groupImages
+            };
+            groups.push(group);
+
+            const groupElement = createGroupElement(group);
+            groupsContainer.appendChild(groupElement);
+            refreshGroupImages(group);
+
+            // Remove images from main area
+            groupImages.forEach(imageIndex => {
+                const thumb = document.querySelector(`[data-image-index="${imageIndex}"]`);
+                if (thumb) thumb.remove();
+            });
+        }
+
+        updateProcessButton();
+    }
+
+    function updateProcessButton() {
+        const hasValidGroups = groups.some(g => g.images.length > 0 && g.name.trim() !== '');
+        processBtn.disabled = !hasValidGroups;
+    }
+
+    // Process groups
+    processBtn.addEventListener('click', function() {
+        const validGroups = groups.filter(g => g.images.length > 0 && g.name.trim() !== '');
+        
+        if (validGroups.length === 0) {
+            alert('Tilføj mindst én gruppe med billeder');
+            return;
+        }
+
+        // Prepare form data
+        const formData = new FormData();
+        const groupsData = validGroups.map(group => ({
+            name: group.name.trim(),
+            images: group.images.map(imageIndex => {
+                const imageData = uploadedImageData[imageIndex];
+                formData.append('images', imageData.file);
+                return imageIndex;
+            })
+        }));
+
+        formData.append('groups_data', JSON.stringify(groupsData));
+        formData.append('small_max_size', document.getElementById('small-size').value);
+        formData.append('large_max_size', document.getElementById('large-size').value);
+        if (document.getElementById('use-aab-prefix').checked) {
+            formData.append('use_aab_prefix', 'on');
+        }
+
+        // Show loading
+        processBtn.textContent = 'Behandler...';
+        processBtn.disabled = true;
+
+        // Submit form
+        fetch('{{ url_for("resizer.view") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                throw new Error('Network response was not ok');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Fejl ved behandling af billeder');
+            processBtn.textContent = 'Behandl billeder';
+            updateProcessButton();
+        });
+    });
+});
+</script>
+
 {% endblock %}
