@@ -63,6 +63,29 @@ def get_case_folder_path(case_number: str) -> str:
     
     return full_path
 
+def get_case_folder_relative(case_number: str) -> str:
+    """Generate relative folder path for ZIP structure (without base path)"""
+    if not case_number or len(case_number) != 4:
+        return "unknown"
+    
+    case_num = int(case_number)
+    
+    # Determine the hundred range folder
+    hundred_start = (case_num // 100) * 100
+    if hundred_start == 0:
+        hundred_folder = "Sag 0001-0099"
+    else:
+        hundred_end = hundred_start + 99
+        hundred_folder = f"Sag {hundred_start:04d}-{hundred_end:04d}"
+    
+    # Determine the ten range folder
+    ten_start = (case_num // 10) * 10
+    ten_end = ten_start + 9
+    ten_folder = f"Sag {ten_start:04d}-{ten_end:04d}"
+    
+    # Build relative path for ZIP
+    return f"Museum/{hundred_folder}/{ten_folder}/{case_number}"
+
 def organize_files_to_museum_folders(processed_files: List[Dict]) -> Dict:
     """Organize processed files to their correct museum folders and return results"""
     organization_results = {
@@ -294,10 +317,25 @@ def handle_form_submission():
                         'large': {'token': large_token, 'filename': filename}
                     })
         
-        # Auto-organize files if requested
+        # Auto-organize files if requested (only works locally, not on Render)
         organization_results = None
         if auto_organize:
-            organization_results = organize_files_to_museum_folders(processed_files)
+            # Check if we're running on Render (no access to network drives)
+            if os.environ.get('RENDER') or os.environ.get('RAILWAY_ENVIRONMENT'):
+                organization_results = {
+                    'success': [],
+                    'errors': ['🌐 Auto-organisering virker kun lokalt - ikke på cloud servere. Download ZIP-filen i stedet.'],
+                    'folders_created': set()
+                }
+            else:
+                try:
+                    organization_results = organize_files_to_museum_folders(processed_files)
+                except Exception as e:
+                    organization_results = {
+                        'success': [],
+                        'errors': [f'Fejl ved auto-organisering: {str(e)}. Download ZIP-filen i stedet.'],
+                        'folders_created': set()
+                    }
         
         # Always create download option (gem gruppe data til download)
         group_token = _store_group_data({
@@ -338,18 +376,41 @@ def download_zip():
         # Zip it up
         zip_buffer = io.BytesIO()
         
+        # Check if we should create museum folder structure
+        create_museum_structure = request.args.get('museum_structure') == 'true'
+        
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             
             for file_pair in group_data['files']:
-                # Tilføj de små
-                small_data = _pop_image(file_pair['small']['token'])
-                if small_data:
-                    zip_file.writestr(f"small/{file_pair['small']['filename']}", small_data)
+                filename = file_pair['small']['filename']
                 
-                # Også de store
-                large_data = _pop_image(file_pair['large']['token'])
-                if large_data:
-                    zip_file.writestr(f"large/{file_pair['large']['filename']}", large_data)
+                if create_museum_structure:
+                    # Create museum-style folder structure in ZIP
+                    case_number = extract_case_number(filename)
+                    if case_number:
+                        case_folder = get_case_folder_relative(case_number)
+                        # Only add large images to case folders (like the real system)
+                        large_data = _pop_image(file_pair['large']['token'])
+                        if large_data:
+                            zip_file.writestr(f"{case_folder}/{filename}", large_data)
+                    
+                    # Also add regular structure for reference
+                    small_data = _pop_image(file_pair['small']['token'])
+                    if small_data:
+                        zip_file.writestr(f"reference/small/{filename}", small_data)
+                    # Large data already used above, get it again if needed
+                    large_data = _IMAGE_STORE.get(file_pair['large']['token'])
+                    if large_data:
+                        zip_file.writestr(f"reference/large/{filename}", large_data)
+                else:
+                    # Standard flat structure
+                    small_data = _pop_image(file_pair['small']['token'])
+                    if small_data:
+                        zip_file.writestr(f"small/{filename}", small_data)
+                    
+                    large_data = _pop_image(file_pair['large']['token'])
+                    if large_data:
+                        zip_file.writestr(f"large/{filename}", large_data)
         
         zip_buffer.seek(0)
         

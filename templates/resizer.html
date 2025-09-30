@@ -69,7 +69,10 @@
                             <label>
                                 <input type="checkbox" id="auto-organize"> Automatisk organisering til museumsmapper
                             </label>
-                            <div class="help-text">⚠️ Virker kun med filnavne som 0000x0000 format (f.eks. 0217x0054)</div>
+                            <div class="help-text">
+                                <div>⚠️ Virker kun med filnavne som 0000x0000 format (f.eks. 0217x0054)</div>
+                                <div class="cloud-warning">🌐 Bemærk: På cloud servere vil funktionen vise en fejl - brug download i stedet</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -140,16 +143,28 @@
         {% endif %}
         
         <div class="spacer"></div>
-        <div class="row">
-            <div class="col">
-                <a href="{{ url_for('resizer.download_zip', token=group_token) }}" class="button">
-                    📦 Download alle billeder (ZIP)
-                </a>
+        <div class="download-options">
+            <h3>📦 Download muligheder:</h3>
+            <div class="row">
+                <div class="col">
+                    <a href="{{ url_for('resizer.download_zip', token=group_token) }}" class="button">
+                        📦 Standard Download (ZIP)
+                    </a>
+                    <div class="download-description">Small/ og large/ mapper</div>
+                </div>
+                <div class="col">
+                    <a href="{{ url_for('resizer.download_zip', token=group_token, museum_structure='true') }}" class="button button-museum">
+                        🏛️ Museum Mappestruktur (ZIP)
+                    </a>
+                    <div class="download-description">Organiseret som museumsmapper - klar til M-drev</div>
+                </div>
             </div>
-            <div class="col">
-                <a href="{{ url_for('resizer.view') }}" class="button" style="background: #6c757d;">
-                    🔄 Start forfra
-                </a>
+            <div class="row">
+                <div class="col col-full">
+                    <a href="{{ url_for('resizer.view') }}" class="button" style="background: #6c757d;">
+                        🔄 Start forfra
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -650,6 +665,50 @@
 .success-section {
     background: #d4edda !important;
     border: 1px solid #c3e6cb;
+}
+
+.cloud-warning {
+    color: #856404;
+    background: #fff3cd;
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-top: 4px;
+    border-left: 3px solid #ffc107;
+}
+
+/* Download options styling */
+.download-options {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.download-options h3 {
+    margin: 0 0 16px 0;
+    color: #495057;
+}
+
+.button-museum {
+    background: #17a2b8 !important;
+    border-color: #17a2b8 !important;
+}
+
+.button-museum:hover {
+    background: #138496 !important;
+    border-color: #117a8b !important;
+}
+
+.download-description {
+    font-size: 12px;
+    color: #6c757d;
+    margin-top: 4px;
+    text-align: center;
+}
+
+.col-full {
+    width: 100%;
+    text-align: center;
 }
 </style>
 
