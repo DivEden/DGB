@@ -3,6 +3,7 @@ import io
 import os
 import re
 import zipfile
+import shutil
 from typing import Dict, List, Optional, Tuple
 from PIL import Image
 from flask import Blueprint, render_template, request, send_file, jsonify
@@ -13,6 +14,108 @@ resizer_bp = Blueprint("resizer", __name__)
 # Simpel in-memory lager for billeder (brug Redis i produktion)
 _IMAGE_STORE: Dict[str, bytes] = {}
 _GROUP_STORE: Dict[str, Dict] = {}
+
+# Museum folder structure configuration
+MUSEUM_BASE_PATH = r"\\dgb-file01\Museum\Museumsfaglig afdeling\0 Museets Samlinger\6 Genstandsfotos"
+
+# For development/testing purposes, you can override the path
+if os.environ.get('DGB_DEV_MODE'):
+    MUSEUM_BASE_PATH = os.path.join(os.getcwd(), 'test_museum_folders')
+
+def extract_case_number(filename: str) -> Optional[str]:
+    """Extract case number from filename like 'AAB 0217x0054 a.jpg' or '0217x0054 a.jpg'"""
+    # Look for pattern like 0217x0054 where 0217 is the case number
+    match = re.search(r'(\d{4})x\d{4}', filename)
+    if match:
+        return match.group(1)
+    return None
+
+def get_case_folder_path(case_number: str) -> str:
+    """Generate the full folder path for a case number"""
+    if not case_number or len(case_number) != 4:
+        raise ValueError(f"Invalid case number: {case_number}")
+    
+    case_num = int(case_number)
+    
+    # Determine the hundred range folder
+    hundred_start = (case_num // 100) * 100
+    if hundred_start == 0:
+        hundred_folder = "Sag 0001-0099"
+    else:
+        hundred_end = hundred_start + 99
+        hundred_folder = f"Sag {hundred_start:04d}-{hundred_end:04d}"
+    
+    # Determine the ten range folder
+    ten_start = (case_num // 10) * 10
+    ten_end = ten_start + 9
+    ten_folder = f"Sag {ten_start:04d}-{ten_end:04d}"
+    
+    # Final case folder
+    case_folder = case_number
+    
+    # Build full path
+    full_path = os.path.join(
+        MUSEUM_BASE_PATH,
+        hundred_folder,
+        ten_folder,
+        case_folder
+    )
+    
+    return full_path
+
+def organize_files_to_museum_folders(processed_files: List[Dict]) -> Dict:
+    """Organize processed files to their correct museum folders and return results"""
+    organization_results = {
+        'success': [],
+        'errors': [],
+        'folders_created': set()
+    }
+    
+    for file_pair in processed_files:
+        try:
+            # Extract case number from filename
+            filename = file_pair['large']['filename']
+            case_number = extract_case_number(filename)
+            
+            if not case_number:
+                organization_results['errors'].append(f"Could not extract case number from {filename}")
+                continue
+            
+            # Get target folder path
+            target_folder = get_case_folder_path(case_number)
+            
+            # Create folder structure if it doesn't exist
+            try:
+                os.makedirs(target_folder, exist_ok=True)
+                organization_results['folders_created'].add(target_folder)
+            except OSError as e:
+                organization_results['errors'].append(f"Failed to create folder {target_folder}: {str(e)}")
+                continue
+            
+            # Only move large versions to museum folders (directly, no subfolder)
+            token = file_pair['large']['token']
+            filename = file_pair['large']['filename']
+            
+            # Get image data (but don't pop it yet, we need it for download too)
+            image_data = _IMAGE_STORE.get(token)
+            if not image_data:
+                organization_results['errors'].append(f"No image data found for {filename}")
+                continue
+            
+            # Write file directly to case folder (no size subfolder)
+            target_file_path = os.path.join(target_folder, filename)
+            
+            try:
+                with open(target_file_path, 'wb') as f:
+                    f.write(image_data)
+                organization_results['success'].append(f"Saved {filename} to {target_file_path}")
+            except OSError as e:
+                organization_results['errors'].append(f"Failed to save {filename}: {str(e)}")
+            
+        except Exception as e:
+            organization_results['errors'].append(f"Error processing {filename}: {str(e)}")
+    
+    return organization_results
 
 def _store_image(data: bytes) -> str:
     import secrets
@@ -152,6 +255,7 @@ def handle_form_submission():
         # hent settings (only small image settings needed)
         small_max_size_kb = int(request.form.get('small_max_size', 300))  # KB now
         use_aab_prefix = request.form.get('use_aab_prefix') == 'on'
+        auto_organize = request.form.get('auto_organize') == 'on'
         
         # gem lidt data osv
         uploaded_files = []
@@ -190,7 +294,12 @@ def handle_form_submission():
                         'large': {'token': large_token, 'filename': filename}
                     })
         
-        # gem gruppe data (til download senere)
+        # Auto-organize files if requested
+        organization_results = None
+        if auto_organize:
+            organization_results = organize_files_to_museum_folders(processed_files)
+        
+        # Always create download option (gem gruppe data til download)
         group_token = _store_group_data({
             'files': processed_files,
             'settings': {
@@ -199,11 +308,15 @@ def handle_form_submission():
             }
         })
         
+        # Always show normal results page with download option
+        # If auto_organize was used, include the organization results for display
         return render_template('resizer.html',
                              current_page='resizer',
                              step='results',
                              processed_count=len(processed_files),
-                             group_token=group_token)
+                             group_token=group_token,
+                             organization_results=organization_results,
+                             auto_organized=auto_organize and organization_results and organization_results.get('success'))
                              
     except Exception as e:
         return render_template('resizer.html',

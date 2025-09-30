@@ -22,7 +22,7 @@
                     <div class="upload-placeholder">
                         <p>📁 Træk billeder hertil eller klik for at vælge</p>
                         <input type="file" id="file-input" multiple accept="image/*" style="display: none;">
-                        <button type="button" onclick="document.getElementById('file-input').click()">Vælg billeder</button>
+                        <button type="button">Vælg billeder</button>
                     </div>
                 </div>
                 
@@ -41,6 +41,14 @@
                 
                 <div class="group-controls">
                     <button type="button" id="add-group-btn">+ Tilføj ny gruppe</button>
+                    <div id="insert-controls" class="insert-controls" style="display: none;">
+                        <span id="selected-count">0 billeder valgt</span>
+                        <select id="target-group-select">
+                            <option value="">Vælg gruppe...</option>
+                        </select>
+                        <button type="button" id="insert-selected-btn" disabled>Indsæt i gruppe</button>
+                        <button type="button" id="clear-selection-btn">Ryd valg</button>
+                    </div>
                 </div>
                 
                 <div id="groups-container" class="groups-container"></div>
@@ -56,6 +64,12 @@
                             <label>
                                 <input type="checkbox" id="use-aab-prefix" checked> Brug "AAB" prefix
                             </label>
+                        </div>
+                        <div class="setting-item full-width">
+                            <label>
+                                <input type="checkbox" id="auto-organize"> Automatisk organisering til museumsmapper
+                            </label>
+                            <div class="help-text">⚠️ Virker kun med filnavne som 0000x0000 format (f.eks. 0217x0054)</div>
                         </div>
                     </div>
                 </div>
@@ -83,6 +97,48 @@
         
         <p class="muted"><strong>Bemærk:</strong> Begge versioner har samme filnavn, men er placeret i separate mapper (small/ og large/)</p>
         
+        {% if auto_organized %}
+        <!-- Auto-organization results -->
+        <div class="organization-results">
+            <h3>🗂️ Automatisk organisering til museumsmapper:</h3>
+            
+            {% if organization_results %}
+                {% if organization_results.success %}
+                <div class="results-section success-section">
+                    <h4>✅ Store billeder gemt i museumsmapper:</h4>
+                    <div class="success-list">
+                        {% for success_msg in organization_results.success %}
+                        <div class="success-item">{{ success_msg }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if organization_results.folders_created %}
+                <div class="results-section">
+                    <h4>📁 Mapper brugt:</h4>
+                    <div class="folder-list">
+                        {% for folder in organization_results.folders_created %}
+                        <div class="folder-item"><code>{{ folder }}</code></div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if organization_results.errors %}
+                <div class="results-section error-section">
+                    <h4>⚠️ Fejl under organisering:</h4>
+                    <div class="error-list">
+                        {% for error_msg in organization_results.errors %}
+                        <div class="error-item">{{ error_msg }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+        
         <div class="spacer"></div>
         <div class="row">
             <div class="col">
@@ -98,6 +154,8 @@
         </div>
     </div>
     {% endif %}
+
+
 
 <style>
 /* Main layout: 2-column design */
@@ -245,11 +303,42 @@
     gap: 12px;
     margin-bottom: 20px;
     flex-wrap: wrap;
+    align-items: center;
 }
 
 .group-controls button {
     padding: 10px 16px;
     font-size: 0.9rem;
+}
+
+/* Insert controls */
+.insert-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f3f4f6;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+
+.insert-controls span {
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.insert-controls select {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.insert-controls button {
+    padding: 6px 12px !important;
+    font-size: 0.85rem !important;
+    min-width: auto;
 }
 
 .groups-container {
@@ -467,6 +556,101 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* Organization Results Styling */
+.results-section {
+    margin: 16px 0;
+    padding: 16px;
+    border-radius: 8px;
+    background: #f8f9fa;
+}
+
+.results-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.success-list, .folder-list, .error-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    background: white;
+}
+
+.success-item, .folder-item, .error-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.success-item:last-child, .folder-item:last-child, .error-item:last-child {
+    border-bottom: none;
+}
+
+.success-item {
+    color: #155724;
+    background: #d4edda;
+}
+
+.folder-item {
+    color: #0c5460;
+    background: #d1ecf1;
+}
+
+.folder-item code {
+    background: rgba(0,0,0,0.05);
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.error-section {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.error-item {
+    color: #721c24;
+    background: #f8d7da;
+}
+
+/* Help text styling */
+.help-text {
+    font-size: 12px;
+    color: #6c757d;
+    margin-top: 4px;
+    font-style: italic;
+}
+
+/* Organization results in main results page */
+.organization-results {
+    margin: 24px 0;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #28a745;
+}
+
+.organization-results h3 {
+    margin: 0 0 16px 0;
+    color: #155724;
+    font-size: 18px;
+}
+
+.organization-results h4 {
+    margin: 12px 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.success-section {
+    background: #d4edda !important;
+    border: 1px solid #c3e6cb;
+}
 </style>
 
 <script>
@@ -611,11 +795,13 @@ document.addEventListener('DOMContentLoaded', function() {
     function addToSelection(thumb, imageIndex) {
         selectedImages.add(imageIndex);
         thumb.classList.add('selected');
+        updateInsertControls();
     }
 
     function removeFromSelection(thumb, imageIndex) {
         selectedImages.delete(imageIndex);
         thumb.classList.remove('selected');
+        updateInsertControls();
     }
 
     function clearSelection() {
@@ -623,6 +809,54 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.image-thumb.selected').forEach(thumb => {
             thumb.classList.remove('selected');
         });
+        updateInsertControls();
+    }
+
+    // Update insert controls based on selection
+    function updateInsertControls() {
+        const insertControls = document.getElementById('insert-controls');
+        const selectedCount = document.getElementById('selected-count');
+        const insertBtn = document.getElementById('insert-selected-btn');
+        const targetSelect = document.getElementById('target-group-select');
+        
+        if (selectedImages.size > 0) {
+            insertControls.style.display = 'flex';
+            selectedCount.textContent = `${selectedImages.size} billede${selectedImages.size > 1 ? 'r' : ''} valgt`;
+            
+            // Update group select options
+            updateGroupSelect();
+            
+            // Enable insert button if group is selected
+            insertBtn.disabled = !targetSelect.value;
+        } else {
+            insertControls.style.display = 'none';
+        }
+    }
+
+    // Update the group select dropdown
+    function updateGroupSelect() {
+        const targetSelect = document.getElementById('target-group-select');
+        const currentValue = targetSelect.value;
+        
+        // Clear existing options except first
+        targetSelect.innerHTML = '<option value="">Vælg gruppe...</option>';
+        
+        // Add groups
+        groups.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = group.name || 'Unnamed';
+            targetSelect.appendChild(option);
+        });
+        
+        // Restore selection if still valid
+        if (currentValue && groups.find(g => g.id === currentValue)) {
+            targetSelect.value = currentValue;
+        }
+        
+        // Update insert button state
+        const insertBtn = document.getElementById('insert-selected-btn');
+        insertBtn.disabled = !targetSelect.value;
     }
 
     // File upload handling
@@ -800,9 +1034,71 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Add group button clicked');
         addGroup();
     }
+
+    // Setup insert controls
+    function setupInsertControls() {
+        const targetSelect = document.getElementById('target-group-select');
+        const insertBtn = document.getElementById('insert-selected-btn');
+        const clearBtn = document.getElementById('clear-selection-btn');
+
+        if (targetSelect) {
+            targetSelect.addEventListener('change', function() {
+                const insertBtn = document.getElementById('insert-selected-btn');
+                insertBtn.disabled = !this.value || selectedImages.size === 0;
+            });
+        }
+
+        if (insertBtn) {
+            insertBtn.addEventListener('click', function() {
+                const targetGroupId = targetSelect.value;
+                if (targetGroupId && selectedImages.size > 0) {
+                    insertSelectedIntoGroup(targetGroupId);
+                }
+            });
+        }
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                clearSelection();
+            });
+        }
+    }
+
+    // Insert selected images into a specific group
+    function insertSelectedIntoGroup(targetGroupId) {
+        const targetGroup = groups.find(g => g.id === targetGroupId);
+        if (!targetGroup) return;
+
+        // Add all selected images to the group
+        const selectedIndices = Array.from(selectedImages);
+        selectedIndices.forEach(imageIndex => {
+            addImageToGroup(targetGroup, imageIndex);
+        });
+
+        // Remove selected images from thumbnails
+        selectedIndices.forEach(imageIndex => {
+            const thumb = document.querySelector(`[data-image-index="${imageIndex}"]`);
+            if (thumb) thumb.remove();
+        });
+
+        // Clear selection and update UI
+        clearSelection();
+        refreshGroupImages(targetGroup);
+        updateProcessButton();
+
+        // Show success message briefly
+        const insertBtn = document.getElementById('insert-selected-btn');
+        const originalText = insertBtn.textContent;
+        insertBtn.textContent = '✓ Indsat!';
+        insertBtn.disabled = true;
+        setTimeout(() => {
+            insertBtn.textContent = originalText;
+        }, 1500);
+    }
     
-    // Initialize button
+    // Initialize buttons
     setupGroupButton();
+    setupInsertControls();
 
     function addGroup(name = '') {
         console.log('Adding new group, current groups:', groups.length);
@@ -825,6 +1121,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         updateProcessButton();
+        updateGroupSelect(); // Update dropdown with new group
         return groupElement;
     }
 
@@ -846,6 +1143,7 @@ document.addEventListener('DOMContentLoaded', function() {
         nameInput.addEventListener('input', function() {
             group.name = this.value;
             updateProcessButton();
+            updateGroupSelect(); // Update dropdown when group name changes
         });
 
         const deleteBtn = groupDiv.querySelector('.delete-group');
@@ -972,6 +1270,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         updateProcessButton();
+        updateGroupSelect(); // Update dropdown after deleting group
         // Re-setup the add button to ensure it still works
         setupGroupButton();
     }
@@ -1008,6 +1307,9 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('small_max_size', document.getElementById('small-size').value);
         if (document.getElementById('use-aab-prefix').checked) {
             formData.append('use_aab_prefix', 'on');
+        }
+        if (document.getElementById('auto-organize').checked) {
+            formData.append('auto_organize', 'on');
         }
 
         // Show loading
