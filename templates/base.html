@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
-      --bg:#f8fafc; --panel:#fff; --muted:#475569; --border:#e2e8f0; --accent:#2563eb;
-      --nav-bg:#1e293b; --nav-text:#f1f5f9; --nav-hover:#334155;
+      --bg:#f8fafc; --panel:#fff; --muted:#475569; --border:#e2e8f0; --accent:#1e4a73;
+      --nav-bg: linear-gradient(135deg, #1e4a73, #2d5a88); --nav-text:#f1f5f9; --nav-hover: rgba(255,255,255,0.1);
     }
     * { box-sizing: border-box; }
     html, body { 
@@ -80,6 +80,56 @@
       border-radius: 6px;
       margin-left: 8px;
     }
+
+    .github-logo {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    /* Hero section */
+    .hero-section {
+      background: var(--nav-bg);
+      color: white;
+      padding: 40px 0;
+      text-align: center;
+      width: 100vw;
+      margin-left: calc(-50vw + 50%);
+      margin-top: -24px;
+      margin-bottom: 30px;
+    }
+
+    .hero-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    .hero-section h1 {
+      font-size: 2.2rem;
+      margin: 0 0 12px 0;
+      font-weight: 600;
+    }
+
+    .hero-section p {
+      font-size: 1.1rem;
+      margin: 0;
+      opacity: 0.85;
+      font-weight: 400;
+    }
+
+    @media (max-width: 768px) {
+      .hero-section {
+        padding: 30px 0;
+      }
+      .hero-section h1 {
+        font-size: 1.8rem;
+      }
+      .hero-section p {
+        font-size: 0.95rem;
+      }
+    }
     
     /* Main content. */
     .wrap { 
@@ -123,39 +173,35 @@
       font: inherit; 
     }
     
-    button { 
-      background:linear-gradient(#3b82f6,#2563eb); 
-      color:#fff; 
-      border:1px solid #2563eb; 
-      border-radius:10px; 
-      padding:8px 12px; 
-      cursor:pointer; 
-      font-weight:600; 
-    }
-    
-    button.secondary { 
+    button {
+      background:linear-gradient(#1e4a73,#15395c);
+      color:#fff;
+      border:1px solid #1e4a73;
+      border-radius:10px;
+      padding:8px 12px;
+      cursor:pointer;
+      font-weight:600;
+    }    button.secondary { 
       background:#f8fafc; 
       color:#0f172a; 
       border:1px solid var(--border); 
     }
     
     .button {
-      background:linear-gradient(#3b82f6,#2563eb); 
-      color:#fff !important; 
-      border:1px solid #2563eb; 
-      border-radius:10px; 
-      padding:8px 12px; 
-      cursor:pointer; 
+      background:linear-gradient(#1e4a73,#15395c);
+      color:#fff !important;
+      border:1px solid #1e4a73;
+      border-radius:10px;
+      padding:8px 12px;
+      cursor:pointer;
       font-weight:600;
       text-decoration: none;
       display: inline-block;
     }
-    
+
     .button:hover {
-      background:linear-gradient(#2563eb,#1d4ed8);
-    }
-    
-    label {
+      background:linear-gradient(#15395c,#0f2a47);
+    }    label {
       display: block;
       margin-bottom: 4px;
       font-weight: 500;
@@ -275,7 +321,7 @@
         
         <div class="nav-external">
           <a href="https://github.com/DivEden/DGB" target="_blank" class="nav-link">
-            🐙 GitHub
+            <img src="{{ url_for('static', filename='images/Github.logo.webp') }}" alt="GitHub" class="github-logo"> GitHub
           </a>
         </div>
       </div>
