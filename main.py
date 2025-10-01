@@ -13,19 +13,25 @@ app.config["SECRET_KEY"] = "your-secret-key-here-change-in-production"
 
 # Initialize database for feedback
 def init_database():
-    conn = sqlite3.connect('feedback.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS feedback (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            message TEXT NOT NULL,
-            email TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    try:
+        # Use absolute path for database
+        db_path = os.path.join(os.getcwd(), 'feedback.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                email TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        print(f"Database initialized at: {db_path}")
+    except Exception as e:
+        print(f"Database initialization error: {e}")
 
 # Initialize database when app starts
 init_database()
@@ -42,10 +48,41 @@ def home():
 def test():
     return render_template("Test.html", current_page="test")
 
+@app.route("/health")
+def health_check():
+    """Simple health check for debugging on Render"""
+    try:
+        import sqlite3
+        db_path = os.path.join(os.getcwd(), 'feedback.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM feedback")
+        count = cursor.fetchone()[0]
+        conn.close()
+        
+        return f"""
+        <h2>Health Check</h2>
+        <p>✅ App is running</p>
+        <p>✅ Database accessible</p>
+        <p>✅ Feedback count: {count}</p>
+        <p>✅ Database path: {db_path}</p>
+        <p>✅ Current directory: {os.getcwd()}</p>
+        <p><a href="/">Back to Home</a> | <a href="/admin/feedback">View Feedback</a></p>
+        """
+    except Exception as e:
+        return f"""
+        <h2>Health Check</h2>
+        <p>❌ Error: {str(e)}</p>
+        <p>📁 Current directory: {os.getcwd()}</p>
+        <p>📁 Files: {os.listdir('.')}</p>
+        <p><a href="/">Back to Home</a></p>
+        """
+
 @app.route("/admin/feedback")
 def view_feedback():
     try:
-        conn = sqlite3.connect('feedback.db')
+        db_path = os.path.join(os.getcwd(), 'feedback.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute('''
             SELECT type, message, email, timestamp 
@@ -91,7 +128,8 @@ def feedback():
         
         # Save to database (works on Render and locally)
         try:
-            conn = sqlite3.connect('feedback.db')
+            db_path = os.path.join(os.getcwd(), 'feedback.db')
+            conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO feedback (type, message, email) 
@@ -102,6 +140,8 @@ def feedback():
             print(f"Feedback saved to database: {type_labels.get(feedback_type, feedback_type)} from {user_email}")
         except Exception as db_error:
             print(f"Database error: {db_error}")
+            # If database fails, still log the feedback in console
+            print(f"FEEDBACK: {feedback_type} from {user_email}: {message}")
         
         # Also save to text file for local development
         try:
