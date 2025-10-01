@@ -285,6 +285,137 @@
       color:#065f46; 
       border-radius:8px; 
     }
+
+    /* Feedback System */
+    .feedback-bubble {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+    }
+
+    .feedback-btn {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--nav-bg);
+      border: none;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(30, 74, 115, 0.3);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .feedback-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(30, 74, 115, 0.4);
+    }
+
+    .feedback-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1001;
+    }
+
+    .feedback-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .feedback-header {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .feedback-header h3 {
+      margin: 0 0 10px 0;
+      color: var(--accent);
+      font-size: 1.5rem;
+    }
+
+    .feedback-header p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .feedback-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .feedback-form select,
+    .feedback-form textarea,
+    .feedback-form input[type="email"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .feedback-form textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .feedback-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    .feedback-close {
+      background: #f8fafc;
+      color: #0f172a;
+      border: 1px solid var(--border);
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .feedback-submit {
+      background: var(--nav-bg);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      .feedback-content {
+        width: 95%;
+        padding: 20px;
+      }
+      .feedback-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 18px;
+      }
+    }
     
     /* Responsive */
     @media (max-width: 768px) {
@@ -331,5 +462,70 @@
   <div class="wrap">
     {% block content %}{% endblock %}
   </div>
+
+  <!-- Feedback System -->
+  <div class="feedback-bubble">
+    <button class="feedback-btn" onclick="openFeedback()">?</button>
+  </div>
+
+  <div class="feedback-modal" id="feedbackModal">
+    <div class="feedback-content">
+      <div class="feedback-header">
+        <h3>Feedback</h3>
+        <p>Report bugs or suggest improvements</p>
+      </div>
+      <form class="feedback-form" action="/feedback" method="POST">
+        <select name="type" required>
+          <option value="">Select type...</option>
+          <option value="bug">Bug Report</option>
+          <option value="feature">Feature Request</option>
+          <option value="improvement">Improvement</option>
+          <option value="other">Other</option>
+        </select>
+        <textarea name="message" placeholder="Describe your feedback..." required></textarea>
+        <input type="email" name="email" placeholder="Your email (optional)">
+        <div class="feedback-actions">
+          <button type="button" class="feedback-close" onclick="closeFeedback()">Cancel</button>
+          <button type="submit" class="feedback-submit">Send</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function openFeedback() {
+      document.getElementById('feedbackModal').style.display = 'block';
+    }
+    
+    function closeFeedback() {
+      document.getElementById('feedbackModal').style.display = 'none';
+    }
+    
+    // Close modal when clicking outside
+    document.getElementById('feedbackModal').onclick = function(e) {
+      if (e.target === this) {
+        closeFeedback();
+      }
+    }
+    
+    // Check for success/error messages
+    window.onload = function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('success') === 'sent') {
+        alert('Thank you for your feedback! It has been sent successfully.');
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (urlParams.get('error')) {
+        const error = urlParams.get('error');
+        if (error === 'missing_fields') {
+          alert('Please fill in all required fields.');
+        } else if (error === 'send_failed') {
+          alert('Sorry, there was an error sending your feedback. Please try again later.');
+        }
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  </script>
 </body>
 </html>
