@@ -3,8 +3,8 @@
 {% block title %}Billedbehandling - DGB Værktøjer{% endblock %}
 
 {% block content %}
-    <h1>🖼️ Billedbehandling og gruppering</h1>
-    <p class="muted">Upload mange billeder og organiser dem i grupper med automatisk omdøbning og størrelsestilpasning.</p>
+    <h1>🖼️ Billedbehandling</h1>
+    <p class="muted">Upload billeder og bearbejd dem individuelt eller i grupper.</p>
 
     {% if error %}
     <div class="card">
@@ -12,8 +12,20 @@
     </div>
     {% endif %}
 
+    <!-- Tab Navigation -->
+    <div class="tab-navigation">
+        <button class="tab-button active" data-tab="grouping">Gruppering</button>
+        <button class="tab-button" data-tab="individual">Individuelle billeder</button>
+    </div>
+
     {% if not step %}
-    <div class="main-container">
+    
+    <!-- Grouping Tab Content -->
+    <div id="grouping-tab" class="tab-content active">
+        <div class="tab-description">
+            <p class="muted">Upload mange billeder og organiser dem i grupper med automatisk omdøbning og størrelsestilpasning.</p>
+        </div>
+        <div class="main-container">
         <!-- Left side: Upload and image library -->
         <div class="left-panel">
             <div class="card">
@@ -82,6 +94,62 @@
             </div>
         </div>
     </div>
+    </div>
+    
+    <!-- Individual Images Tab Content -->
+    <div id="individual-tab" class="tab-content">
+        <div class="tab-description">
+            <p class="muted">Upload billeder og behandl dem individuelt med tilpassede navne og størrelser.</p>
+        </div>
+        
+        <div class="individual-container">
+            <div class="card">
+                <h2>1. Upload billeder</h2>
+                <div class="upload-area" id="individual-upload-area">
+                    <div class="upload-placeholder">
+                        <p>📁 Træk billeder hertil eller klik for at vælge</p>
+                        <input type="file" id="individual-file-input" multiple accept="image/*" style="display: none;">
+                        <button type="button">Vælg billeder</button>
+                    </div>
+                </div>
+                
+                <div id="individual-images" class="individual-images-section" style="display: none;">
+                    <h3>Individuelle billeder</h3>
+                    <p class="muted">Navngiv hvert billede og juster indstillinger</p>
+                    <div id="individual-list" class="individual-list"></div>
+                </div>
+            </div>
+            
+            <div class="card" id="individual-settings" style="display: none;">
+                <h2>2. Indstillinger</h2>
+                
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label for="individual-small-size">Fil størrelse (KB):</label>
+                        <input type="number" id="individual-small-size" value="300" min="50" max="2000">
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="individual-use-aab-prefix">
+                            Tilføj AAB prefix
+                        </label>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="individual-auto-organize">
+                            Auto-organiser til museum mapper
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="spacer"></div>
+                <button type="button" id="individual-process-btn" class="process-button" disabled>Behandl billeder</button>
+            </div>
+        </div>
+    </div>
+    
     {% endif %}
 
     {% if step == 'results' %}
@@ -173,6 +241,139 @@
 
 
 <style>
+/* Tab Navigation */
+.tab-navigation {
+    display: flex;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 24px;
+    gap: 4px;
+}
+
+.tab-button {
+    background: none;
+    border: none;
+    padding: 12px 24px;
+    font-size: 16px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+    color: var(--text-muted);
+}
+
+.tab-button:hover {
+    background: var(--hover-bg, #f1f5f9);
+    color: var(--text);
+}
+
+.tab-button.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+    font-weight: 600;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.tab-description {
+    margin-bottom: 24px;
+}
+
+/* Individual images layout */
+.individual-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+}
+
+.individual-list {
+    display: grid;
+    gap: 16px;
+}
+
+.individual-item {
+    display: grid;
+    grid-template-columns: 100px 1fr auto;
+    gap: 16px;
+    padding: 16px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    align-items: center;
+    background: #f8fafc;
+}
+
+.individual-item img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.individual-item-info {
+    display: grid;
+    gap: 8px;
+}
+
+.individual-item-info label {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.individual-item-info input {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.individual-remove-btn {
+    background: var(--danger, #ef4444);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+}
+
+.individual-remove-btn:hover {
+    background: var(--danger-dark, #dc2626);
+}
+
+.settings-grid {
+    display: grid;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.setting-group label {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.setting-group input[type="number"] {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    max-width: 150px;
+}
+
+.setting-group input[type="checkbox"] {
+    margin-right: 8px;
+}
+
 /* Main layout: 2-column design */
 .main-container {
     display: grid;
@@ -310,6 +511,30 @@
     text-align: center;
     background: linear-gradient(transparent, rgba(0,0,0,0.8));
     text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+
+.image-thumb .remove-thumb-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.image-thumb .remove-thumb-btn:hover {
+    opacity: 1;
+    background: rgba(239, 68, 68, 1);
 }
 
 /* Groups styling - improved for right panel */
@@ -714,6 +939,26 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    
+    // Tab functionality
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    tabButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const tabName = this.dataset.tab;
+            
+            // Remove active class from all tabs and contents
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // Add active class to clicked tab and corresponding content
+            this.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
+        });
+    });
+    
+    // Grouping tab elements
     const fileInput = document.getElementById('file-input');
     const uploadArea = document.getElementById('upload-area');
     const uploadedImages = document.getElementById('uploaded-images');
@@ -948,6 +1193,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
+        // Ingen fil størrelse begrænsning - brugeren kan uploade så store filer som de vil
+        // File size validation removed for unlimited uploads
+
         // Process each file
         imageFiles.forEach(file => {
             const reader = new FileReader();
@@ -1015,6 +1263,7 @@ document.addEventListener('DOMContentLoaded', function() {
         thumb.innerHTML = `
             <img src="${imageData.thumbnailSrc || imageData.src}" alt="${imageData.name}">
             <div class="info">${imageData.name}</div>
+            <button type="button" class="remove-thumb-btn" onclick="removeUploadedImage(${index})">×</button>
         `;
 
         thumb.addEventListener('dragstart', function(e) {
@@ -1072,6 +1321,67 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         imageThumbnails.appendChild(thumb);
+    }
+
+    // Function to remove uploaded image and update all indices
+    window.removeUploadedImage = function(imageIndex) {
+        // Remove from uploaded image data
+        uploadedImageData.splice(imageIndex, 1);
+        
+        // Update all groups to fix their image indices
+        groups.forEach(group => {
+            // Remove any references to the deleted image
+            group.images = group.images.filter(idx => idx !== imageIndex);
+            
+            // Update indices for images that come after the deleted one
+            group.images = group.images.map(idx => idx > imageIndex ? idx - 1 : idx);
+        });
+        
+        // Remove from selection if selected
+        if (selectedImages.has(imageIndex)) {
+            selectedImages.delete(imageIndex);
+        }
+        
+        // Update selection indices for images that come after the deleted one
+        const newSelection = new Set();
+        selectedImages.forEach(idx => {
+            if (idx > imageIndex) {
+                newSelection.add(idx - 1);
+            } else if (idx < imageIndex) {
+                newSelection.add(idx);
+            }
+        });
+        selectedImages = newSelection;
+        
+        // Refresh the entire UI
+        refreshAllThumbnails();
+        refreshAllGroups();
+        updateProcessButton();
+        updateInsertControls();
+    };
+
+    // Function to refresh all thumbnails with correct indices
+    function refreshAllThumbnails() {
+        imageThumbnails.innerHTML = '';
+        
+        uploadedImageData.forEach((imageData, index) => {
+            displayUploadedImage(imageData, index);
+        });
+        
+        // Restore selection
+        selectedImages.forEach(index => {
+            const thumb = document.querySelector(`[data-image-index="${index}"]`);
+            if (thumb) {
+                thumb.classList.add('selected');
+            }
+        });
+    }
+
+    // Function to refresh all groups
+    function refreshAllGroups() {
+        groups.forEach(group => {
+            refreshGroupImages(group);
+        });
     }
 
     // Group management - ensure button works after groups are deleted
@@ -1279,8 +1589,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     window.removeImageFromGroup = function(groupId, imageIndexInGroup) {
         const group = groups.find(g => g.id === groupId);
-        if (group) {
+        if (group && imageIndexInGroup < group.images.length) {
+            // Get the image index that we're removing
+            const imageIndex = group.images[imageIndexInGroup];
+            
+            // Remove from group
             group.images.splice(imageIndexInGroup, 1);
+            
+            // Add the image back to the thumbnail gallery ONLY if it's not already there
+            const existingThumb = document.querySelector(`[data-image-index="${imageIndex}"]`);
+            if (!existingThumb) {
+                const imageData = uploadedImageData[imageIndex];
+                if (imageData) {
+                    displayUploadedImage(imageData, imageIndex);
+                }
+            }
+            
             refreshGroupImages(group);
             updateProcessButton();
         }
@@ -1316,6 +1640,22 @@ document.addEventListener('DOMContentLoaded', function() {
     function deleteGroup(groupId) {
         console.log('Deleting group:', groupId);
         
+        // Find the group and return its images to the gallery
+        const group = groups.find(g => g.id === groupId);
+        if (group && group.images.length > 0) {
+            // Add all images from this group back to the thumbnail gallery
+            group.images.forEach(imageIndex => {
+                const imageData = uploadedImageData[imageIndex];
+                if (imageData) {
+                    // Check if thumbnail doesn't already exist
+                    const existingThumb = document.querySelector(`[data-image-index="${imageIndex}"]`);
+                    if (!existingThumb) {
+                        displayUploadedImage(imageData, imageIndex);
+                    }
+                }
+            });
+        }
+        
         // Remove from data structure
         groups = groups.filter(g => g.id !== groupId);
         
@@ -1341,12 +1681,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Process groups
     processBtn.addEventListener('click', function() {
-        const validGroups = groups.filter(g => g.images.length > 0 && g.name.trim() !== '');
+        // Tjek om der er grupper med billeder
+        const groupsWithImages = groups.filter(g => g.images.length > 0);
         
-        if (validGroups.length === 0) {
+        if (groupsWithImages.length === 0) {
             alert('Tilføj mindst én gruppe med billeder');
             return;
         }
+        
+        // Tjek om alle grupper med billeder har navne
+        const unnamedGroups = groupsWithImages.filter(g => !g.name.trim() || g.name.trim() === 'Gruppe' || g.name.trim().toLowerCase() === 'unnamed');
+        
+        if (unnamedGroups.length > 0) {
+            alert('🏷️ Alle grupper skal have navne! Husk at navngive dine grupper før behandling.\n\nKlik på gruppe titlen for at ændre navnet.');
+            return;
+        }
+        
+        const validGroups = groupsWithImages;
 
         // Prepare form data
         const formData = new FormData();
@@ -1384,20 +1735,246 @@ document.addEventListener('DOMContentLoaded', function() {
             if (response.ok) {
                 return response.text();
             } else {
-                throw new Error('Network response was not ok');
+                return response.text().then(text => {
+                    throw new Error('Server error: ' + text);
+                });
             }
         })
         .then(html => {
-            // Replace current page content with response
-            document.body.innerHTML = html;
+            // Check if response looks like valid HTML
+            if (html.trim().length > 0 && html.includes('<')) {
+                // Replace current page content with response
+                document.body.innerHTML = html;
+                
+                // Re-run any scripts in the new content
+                const scripts = document.querySelectorAll('script');
+                scripts.forEach(script => {
+                    if (script.innerHTML.trim()) {
+                        const newScript = document.createElement('script');
+                        newScript.innerHTML = script.innerHTML;
+                        script.parentNode.replaceChild(newScript, script);
+                    }
+                });
+            } else {
+                throw new Error('Invalid response from server');
+            }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Fejl ved behandling af billeder');
+            let errorMessage = 'Fejl ved behandling af billeder: ' + error.message;
+            
+            // Simple error handling without file size restrictions
+            if (error.message.includes('timeout')) {
+                errorMessage = 'Behandling timed out. Der er muligvis for mange billeder - prøv igen.';
+            }
+            
+            alert(errorMessage);
             processBtn.textContent = 'Behandl billeder';
             updateProcessButton();
         });
     });
+    
+    // Individual Images Tab Functionality
+    const individualFileInput = document.getElementById('individual-file-input');
+    const individualUploadArea = document.getElementById('individual-upload-area');
+    const individualImages = document.getElementById('individual-images');
+    const individualList = document.getElementById('individual-list');
+    const individualSettings = document.getElementById('individual-settings');
+    const individualProcessBtn = document.getElementById('individual-process-btn');
+    
+    let individualImageData = [];
+    
+    // Individual upload functionality
+    individualUploadArea.addEventListener('click', () => individualFileInput.click());
+    individualUploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        individualUploadArea.style.borderColor = 'var(--primary)';
+        individualUploadArea.style.background = '#f0f9ff';
+    });
+    
+    individualUploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        individualUploadArea.style.borderColor = 'var(--border)';
+        individualUploadArea.style.background = '#f8fafc';
+    });
+    
+    individualUploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        individualUploadArea.style.borderColor = 'var(--border)';
+        individualUploadArea.style.background = '#f8fafc';
+        handleIndividualFiles(e.dataTransfer.files);
+    });
+    
+    individualFileInput.addEventListener('change', (e) => {
+        handleIndividualFiles(e.target.files);
+    });
+    
+    function handleIndividualFiles(files) {
+        const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+        
+        if (imageFiles.length === 0) {
+            alert('Kun billedfiler er tilladt');
+            return;
+        }
+        
+        // Process each file
+        imageFiles.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const originalName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+                    individualImageData.push({
+                        file: file,
+                        preview: e.target.result,
+                        name: originalName,
+                        width: img.width,
+                        height: img.height
+                    });
+                    updateIndividualDisplay();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    function updateIndividualDisplay() {
+        if (individualImageData.length > 0) {
+            individualImages.style.display = 'block';
+            individualSettings.style.display = 'block';
+            renderIndividualList();
+            updateIndividualProcessButton();
+        } else {
+            individualImages.style.display = 'none';
+            individualSettings.style.display = 'none';
+        }
+    }
+    
+    function renderIndividualList() {
+        individualList.innerHTML = '';
+        
+        individualImageData.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'individual-item';
+            div.innerHTML = `
+                <img src="${item.preview}" alt="Preview">
+                <div class="individual-item-info">
+                    <label>Navn:</label>
+                    <input type="text" value="${item.name}" data-index="${index}" class="individual-name-input">
+                    <small class="muted">${item.width} × ${item.height} px</small>
+                </div>
+                <button type="button" class="individual-remove-btn" data-index="${index}">Fjern</button>
+            `;
+            
+            // Add event listeners
+            const nameInput = div.querySelector('.individual-name-input');
+            nameInput.addEventListener('input', function() {
+                individualImageData[index].name = this.value;
+                updateIndividualProcessButton();
+            });
+            
+            const removeBtn = div.querySelector('.individual-remove-btn');
+            removeBtn.addEventListener('click', function() {
+                individualImageData.splice(index, 1);
+                updateIndividualDisplay();
+            });
+            
+            individualList.appendChild(div);
+        });
+    }
+    
+    function updateIndividualProcessButton() {
+        const hasImages = individualImageData.length > 0;
+        const allNamed = individualImageData.every(item => item.name.trim() !== '');
+        
+        individualProcessBtn.disabled = !hasImages || !allNamed;
+        
+        if (!hasImages) {
+            individualProcessBtn.textContent = 'Behandl billeder';
+        } else if (!allNamed) {
+            individualProcessBtn.textContent = 'Navngiv alle billeder først';
+        } else {
+            individualProcessBtn.textContent = `Behandl ${individualImageData.length} billeder`;
+        }
+    }
+    
+    // Individual processing
+    individualProcessBtn.addEventListener('click', function() {
+        if (individualImageData.length === 0) {
+            alert('Upload billeder først');
+            return;
+        }
+        
+        const unnamedImages = individualImageData.filter(item => !item.name.trim());
+        if (unnamedImages.length > 0) {
+            alert('🏷️ Alle billeder skal have navne før behandling!');
+            return;
+        }
+        
+        individualProcessBtn.textContent = 'Behandler...';
+        individualProcessBtn.disabled = true;
+        
+        // Prepare form data
+        const formData = new FormData();
+        
+        // Add files
+        individualImageData.forEach((item) => {
+            formData.append('images', item.file);
+        });
+        
+        // Add individual mode flag
+        formData.append('individual_mode', 'true');
+        
+        // Prepare individual data
+        const individualData = individualImageData.map((item, index) => ({
+            name: item.name.trim(),
+            index: index
+        }));
+        
+        formData.append('individual_data', JSON.stringify(individualData));
+        formData.append('small_max_size', document.getElementById('individual-small-size').value);
+        if (document.getElementById('individual-use-aab-prefix').checked) {
+            formData.append('use_aab_prefix', 'on');
+        }
+        if (document.getElementById('individual-auto-organize').checked) {
+            formData.append('auto_organize', 'on');
+        }
+        
+        // Submit to server
+        fetch('/resizer', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.text())
+        .then(html => {
+            // Replace page content with response
+            document.body.innerHTML = html;
+            
+            // Re-run any scripts in the new content
+            const scripts = document.querySelectorAll('script');
+            scripts.forEach(script => {
+                if (script.innerHTML.trim()) {
+                    const newScript = document.createElement('script');
+                    newScript.innerHTML = script.innerHTML;
+                    script.parentNode.replaceChild(newScript, script);
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            let errorMessage = 'Fejl ved behandling af billeder: ' + error.message;
+            
+            if (error.message.includes('timeout')) {
+                errorMessage = 'Behandling timed out. Der er muligvis for mange billeder - prøv igen.';
+            }
+            
+            alert(errorMessage);
+            individualProcessBtn.textContent = `Behandl ${individualImageData.length} billeder`;
+            updateIndividualProcessButton();
+        });
+    });
+    
 });
 </script>
 

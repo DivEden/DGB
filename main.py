@@ -8,7 +8,8 @@ from pages.resizer import resizer_bp
 from pages.Sammenfletter import sammenfletter_bp
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
+# Ingen fil størrelse begrænsning - lad brugeren uploade så meget som de vil
+# app.config["MAX_CONTENT_LENGTH"] = None  # Unlimited
 app.config["SECRET_KEY"] = "your-secret-key-here-change-in-production"
 
 # Initialize database for feedback

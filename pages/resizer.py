@@ -105,7 +105,10 @@ def organize_files_to_museum_folders(processed_files: List[Dict]) -> Dict:
                 continue
             
             # Get target folder path
-            target_folder = get_case_folder_path(case_number)
+            case_folder = get_case_folder_path(case_number)
+            
+            # Create "museumsklar" subfolder inside case folder
+            target_folder = os.path.join(case_folder, "museumsklar")
             
             # Create folder structure if it doesn't exist
             try:
@@ -115,7 +118,7 @@ def organize_files_to_museum_folders(processed_files: List[Dict]) -> Dict:
                 organization_results['errors'].append(f"Failed to create folder {target_folder}: {str(e)}")
                 continue
             
-            # Only move large versions to museum folders (directly, no subfolder)
+            # Only move large versions to museum folders (in museumsklar subfolder)
             token = file_pair['large']['token']
             filename = file_pair['large']['filename']
             
@@ -125,7 +128,7 @@ def organize_files_to_museum_folders(processed_files: List[Dict]) -> Dict:
                 organization_results['errors'].append(f"No image data found for {filename}")
                 continue
             
-            # Write file directly to case folder (no size subfolder)
+            # Write file to museumsklar subfolder
             target_file_path = os.path.join(target_folder, filename)
             
             try:
@@ -256,42 +259,224 @@ def view():
     return handle_form_submission()
 
 def handle_form_submission():
-    """Handle form submission for processing groups"""
+    """Handle form submission for processing groups or individual images"""
     try:
         # hent uploadede filer
         files = request.files.getlist('images')
-        if not files:
+        if not files or not any(f.filename for f in files):
             return render_template('resizer.html', 
                                  current_page='resizer',
                                  error='Ingen billeder uploadet')
         
-        # hent grupper data
-        groups_data = request.form.get('groups_data')
-        if not groups_data:
+        # Check if this is individual mode
+        individual_mode = request.form.get('individual_mode') == 'true'
+        
+        if individual_mode:
+            return handle_individual_submission(files)
+        else:
+            # hent grupper data
+            groups_data = request.form.get('groups_data')
+            if not groups_data:
+                return render_template('resizer.html', 
+                                     current_page='resizer',
+                                     error='Ingen grupper at behandle')
+            return handle_group_submission(files, groups_data)
+        
+    except Exception as e:
+        return render_template('resizer.html', 
+                             current_page='resizer',
+                             error=f'Uventet fejl: {str(e)}')
+
+def handle_individual_submission(files):
+    """Handle individual image processing"""
+    try:
+        # Get individual data
+        individual_data_str = request.form.get('individual_data')
+        if not individual_data_str:
             return render_template('resizer.html', 
                                  current_page='resizer',
-                                 error='Ingen grupper at behandle')
+                                 error='Ingen individuel data at behandle')
         
         import json
-        groups = json.loads(groups_data)
+        try:
+            individual_data = json.loads(individual_data_str)
+            if not individual_data:
+                raise ValueError("No individual data found")
+        except (json.JSONDecodeError, ValueError) as e:
+            return render_template('resizer.html', 
+                                 current_page='resizer',
+                                 error=f'Fejl i individuel data: {str(e)}')
         
-        # hent settings (only small image settings needed)
-        small_max_size_kb = int(request.form.get('small_max_size', 300))  # KB now
+        # Get settings
+        try:
+            small_max_size_kb = int(request.form.get('small_max_size', 300))
+            if small_max_size_kb < 50 or small_max_size_kb > 2000:
+                small_max_size_kb = 300
+        except ValueError:
+            small_max_size_kb = 300
+            
         use_aab_prefix = request.form.get('use_aab_prefix') == 'on'
         auto_organize = request.form.get('auto_organize') == 'on'
         
+        print(f"Individual processing: {len(files)} files, settings: small_max_size_kb={small_max_size_kb}, use_aab_prefix={use_aab_prefix}, auto_organize={auto_organize}")
+        
+        # Load uploaded files
+        uploaded_files = []
+        for i, file in enumerate(files):
+            if file and file.filename:
+                try:
+                    image_data = file.read()
+                    if len(image_data) > 0:
+                        uploaded_files.append(image_data)
+                        print(f"Loaded individual file {i}: {file.filename} ({len(image_data)} bytes)")
+                    else:
+                        print(f"Warning: Empty file {file.filename}")
+                except Exception as e:
+                    print(f"Error reading file {file.filename}: {str(e)}")
+                    return render_template('resizer.html', 
+                                         current_page='resizer',
+                                         error=f'Fejl ved læsning af fil {file.filename}: {str(e)}')
+        
+        if not uploaded_files:
+            return render_template('resizer.html', 
+                                 current_page='resizer',
+                                 error='Ingen gyldige billedfiler fundet')
+        
+        # Process individual images
+        processed_files = []
+        
+        for item in individual_data:
+            image_name = item.get('name', '').strip()
+            image_index = item.get('index', 0)
+            
+            if not image_name:
+                return render_template('resizer.html', 
+                                     current_page='resizer',
+                                     error='🏷️ Alle billeder skal have navne!')
+            
+            if image_index < len(uploaded_files):
+                image_data = uploaded_files[image_index]
+                
+                # Generate filename
+                filename = f"AAB {image_name}.jpg" if use_aab_prefix else f"{image_name}.jpg"
+                
+                # Create small version (compressed)
+                small_image = create_thumbnail(image_data, small_max_size_kb)
+                small_token = _store_image(small_image)
+                
+                # Create large version (original quality)
+                large_image = resize_image(image_data)
+                large_token = _store_image(large_image)
+                
+                processed_files.append({
+                    'small': {'token': small_token, 'filename': filename},
+                    'large': {'token': large_token, 'filename': filename}
+                })
+        
+        # Auto-organize files if requested
+        organization_results = None
+        if auto_organize:
+            if os.environ.get('RENDER') or os.environ.get('RAILWAY_ENVIRONMENT'):
+                organization_results = {
+                    'success': [],
+                    'errors': ['🌐 Auto-organisering virker kun lokalt - ikke på cloud servere. Download ZIP-filen i stedet.'],
+                    'folders_created': set()
+                }
+            else:
+                try:
+                    organization_results = organize_files_to_museum_folders(processed_files)
+                except Exception as e:
+                    organization_results = {
+                        'success': [],
+                        'errors': [f'Fejl ved auto-organisering: {str(e)}. Download ZIP-filen i stedet.'],
+                        'folders_created': set()
+                    }
+        
+        # Create download option
+        group_token = _store_group_data({
+            'files': processed_files,
+            'settings': {
+                'small_max_size_kb': small_max_size_kb,
+                'use_aab_prefix': use_aab_prefix
+            }
+        })
+        
+        return render_template('resizer.html',
+                             current_page='resizer',
+                             step='results',
+                             processed_files=processed_files,
+                             group_token=group_token,
+                             organization_results=organization_results)
+    
+    except Exception as e:
+        print(f"Individual processing error: {str(e)}")
+        return render_template('resizer.html', 
+                             current_page='resizer',
+                             error=f'Fejl ved behandling af individuelle billeder: {str(e)}')
+
+def handle_group_submission(files, groups_data):
+    """Handle group-based image processing (existing functionality)"""
+    try:
+        print(f"Processing {len(files)} files with groups data: {groups_data}")
+        
+        import json
+        try:
+            groups = json.loads(groups_data)
+            if not groups:
+                raise ValueError("No groups found")
+        except (json.JSONDecodeError, ValueError) as e:
+            return render_template('resizer.html', 
+                                 current_page='resizer',
+                                 error=f'Fejl i gruppe data: {str(e)}')
+        
+        # hent settings (only small image settings needed)
+        try:
+            small_max_size_kb = int(request.form.get('small_max_size', 300))  # KB now
+            if small_max_size_kb < 50 or small_max_size_kb > 2000:
+                small_max_size_kb = 300
+        except ValueError:
+            small_max_size_kb = 300
+            
+        use_aab_prefix = request.form.get('use_aab_prefix') == 'on'
+        auto_organize = request.form.get('auto_organize') == 'on'
+        
+        print(f"Settings: small_max_size_kb={small_max_size_kb}, use_aab_prefix={use_aab_prefix}, auto_organize={auto_organize}")
+        
         # gem lidt data osv
         uploaded_files = []
-        for file in files:
+        for i, file in enumerate(files):
             if file and file.filename:
-                image_data = file.read()
-                uploaded_files.append(image_data)
+                try:
+                    image_data = file.read()
+                    if len(image_data) > 0:
+                        uploaded_files.append(image_data)
+                        print(f"Loaded file {i}: {file.filename} ({len(image_data)} bytes)")
+                    else:
+                        print(f"Warning: Empty file {file.filename}")
+                except Exception as e:
+                    print(f"Error reading file {file.filename}: {str(e)}")
+                    return render_template('resizer.html', 
+                                         current_page='resizer',
+                                         error=f'Fejl ved læsning af fil {file.filename}: {str(e)}')
         
+        if not uploaded_files:
+            return render_template('resizer.html', 
+                                 current_page='resizer',
+                                 error='Ingen gyldige billedfiler fundet')
+        
+        
+        # Valider at alle grupper har navne
+        for group in groups:
+            group_name = group.get('name', '').strip()
+            if not group_name or group_name == 'unnamed' or group_name.lower() == 'gruppe':
+                return render_template('resizer.html', 
+                                     current_page='resizer',
+                                     error='🏷️ Alle grupper skal have navne! Husk at navngive dine grupper før behandling.')
         
         processed_files = []
         
         for group in groups:
-            group_name = group.get('name', 'unnamed')
+            group_name = group.get('name', '').strip()
             image_indices = group.get('images', [])
             
             # Filnavne: AAB <gruppenavn> a.jpg, AAB <gruppenavn> b.jpg, ... eller uden AAB
