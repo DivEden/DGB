@@ -36,6 +36,10 @@
         <h2>⚡ Simpel Resize</h2>
         <p class="muted">Upload billeder og få dem komprimeret til en bestemt KB størrelse. Behold filnavne.</p>
         
+        <div class="alert" style="background: #e3f2fd; border: 1px solid #1976d2; color: #0d47a1; padding: 10px; border-radius: 6px; margin-bottom: 16px; font-size: 14px;">
+            <strong>☁️ Cloud Server Begrænsninger:</strong> Maks 15-20 billeder ad gangen for stabil drift
+        </div>
+        
         <form method="post" enctype="multipart/form-data" action="{{ url_for('resizer.view', tab='simple') }}">
             <div class="simple-upload-section">
                 <h3>1. Upload billeder</h3>

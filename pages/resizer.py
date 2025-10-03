@@ -163,58 +163,74 @@ def _get_group_data(token: str) -> Optional[Dict]:
     return _GROUP_STORE.get(token, None)
 
 def create_thumbnail(image_data: bytes, max_size_kb: int = 300) -> bytes:
-    """Create a compressed thumbnail with size limit in KB - aims for target size"""
-    image = Image.open(io.BytesIO(image_data))
-    
-    # konverter til RGB (for PNG with transparency, etc.)
-    if image.mode in ('RGBA', 'LA'):
-        background = Image.new('RGB', image.size, (255, 255, 255))
-        background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
-        image = background
-    elif image.mode != 'RGB':
-        image = image.convert('RGB')
-    
-    # Klap hesten med resize - først prøves der at ramme KB mål
-    temp_image = image.copy()
-    quality = 95
-    
-    for attempt in range(12):
+    """Create a compressed thumbnail with size limit in KB - optimized for cloud servers"""
+    try:
+        image = Image.open(io.BytesIO(image_data))
+        
+        # For very large images, resize immediately to save memory
+        if max(image.size) > 2000:
+            ratio = 2000 / max(image.size)
+            new_size = (int(image.width * ratio), int(image.height * ratio))
+            image = image.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # konverter til RGB (for PNG with transparency, etc.)
+        if image.mode in ('RGBA', 'LA'):
+            background = Image.new('RGB', image.size, (255, 255, 255))
+            background.paste(image, mask=image.split()[-1] if image.mode == 'RGBA' else None)
+            image = background
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # More aggressive compression approach for cloud
+        temp_image = image.copy()
+        quality = 85  # Start lower
+        
+        # Fewer iterations to save processing time
+        for attempt in range(8):
+            output = io.BytesIO()
+            temp_image.save(output, format='JPEG', quality=quality, optimize=True)
+            size_kb = len(output.getvalue()) / 1024
+            
+            # Accept looser targets for speed
+            if size_kb <= max_size_kb and size_kb >= max_size_kb * 0.6:
+                result = output.getvalue()
+                # Clean up memory
+                del output, temp_image, image
+                gc.collect()
+                return result
+            elif size_kb <= max_size_kb:
+                # Accept if under target
+                result = output.getvalue()
+                del output, temp_image, image
+                gc.collect()
+                return result
+            else:
+                # Reduce quality more aggressively
+                quality -= 8
+                
+            # Resize more aggressively if needed
+            if quality <= 50 and max(temp_image.size) > 800:
+                ratio = 0.8
+                new_size = (int(temp_image.width * ratio), int(temp_image.height * ratio))
+                temp_image = temp_image.resize(new_size, Image.Resampling.LANCZOS)
+                quality = 75
+        
+        # Final save with aggressive compression
         output = io.BytesIO()
-        temp_image.save(output, format='JPEG', quality=quality, optimize=True)
-        size_kb = len(output.getvalue()) / 1024
+        temp_image.save(output, format='JPEG', quality=max(30, quality), optimize=True)
+        result = output.getvalue()
         
-        # Hvis inden 15% - accepter det
-        if size_kb <= max_size_kb and size_kb >= max_size_kb * 0.75:
-            output.seek(0)
-            return output.getvalue()
-        elif size_kb <= max_size_kb:
-            # prøv højere kvalitet hvis muligt
-            if quality < 95:
-                quality = min(95, quality + 5)
-            else:
-                # allerede maks? accepter resultat
-                output.seek(0)
-                return output.getvalue()
-        else:
-            # gør kvalitet lavere mere gradvist
-            if quality > 70:
-                quality -= 5
-            else:
-                quality -= 10
+        # Clean up memory
+        del output, temp_image, image
+        gc.collect()
         
-        # hvis kvalitet er meget lav, resize billede og reset kvalitet
-        if quality <= 40 and max(temp_image.size) > 600:
-            ratio = 0.85
-            new_size = (int(temp_image.width * ratio), int(temp_image.height * ratio))
-            temp_image = image.resize(new_size, Image.Resampling.LANCZOS)
-            quality = 85
-            image = temp_image  # Update
-    
-    # Det endelige save - lav hele det område her om, både over og under
-    output = io.BytesIO()
-    temp_image.save(output, format='JPEG', quality=quality, optimize=True)
-    output.seek(0)
-    return output.getvalue()
+        return result
+        
+    except Exception as e:
+        print(f"Error in create_thumbnail: {e}")
+        # Clean up on error
+        gc.collect()
+        raise
 
 
 def resize_image(image_data: bytes, max_size: int = None) -> bytes:
@@ -272,7 +288,7 @@ def view():
         return handle_form_submission()  # Default fallback
 
 def handle_simple_resize():
-    """Handle simple resize - with memory management for large batches"""
+    """Handle simple resize - optimized for cloud servers with strict limits"""
     try:
         files = request.files.getlist('images')
         if not files or not any(f.filename for f in files):
@@ -283,12 +299,12 @@ def handle_simple_resize():
         
         print(f"Simple resize processing {len(files)} files")
         
-        # Memory management - warn for very large batches
-        if len(files) > 100:
+        # Strict limits for cloud servers - much more conservative
+        if len(files) > 20:
             return render_template('resizer.html', 
                                  current_page='resizer',
                                  active_tab='simple',
-                                 error=f'For mange billeder på én gang ({len(files)})! Prøv med maks 100 billeder ad gangen for at undgå server fejl.')
+                                 error=f'For mange billeder på cloud server ({len(files)})! Maks 20 billeder ad gangen på denne server for at undgå timeout.')
         
         # Get target size from form (in KB)
         try:
@@ -300,7 +316,7 @@ def handle_simple_resize():
         
         processed_files = []
         
-        # Process files with memory management
+        # Process files with aggressive cloud optimization
         for i, file in enumerate(files):
             if file and file.filename:
                 try:
@@ -312,11 +328,16 @@ def handle_simple_resize():
                         print(f"Skipping empty file: {file.filename}")
                         continue
                     
-                    # Check file size (warn if very large)
+                    # Much stricter file size limits for cloud
                     file_size_mb = len(image_data) / (1024 * 1024)
-                    if file_size_mb > 50:  # 50MB limit per file
-                        print(f"Skipping very large file ({file_size_mb:.1f}MB): {file.filename}")
+                    if file_size_mb > 20:  # Reduced from 50MB to 20MB for cloud
+                        print(f"Skipping large file ({file_size_mb:.1f}MB): {file.filename}")
                         continue
+                    
+                    # Track total processed size to prevent memory overflow
+                    if i > 0 and i % 5 == 0:  # Check every 5 files
+                        print(f"Processed {i} files, checking memory usage...")
+                        gc.collect()  # Extra cleanup
                         
                     # Simple resize to target KB size (keep same filename)
                     resized_image = create_thumbnail(image_data, target_size_kb)
@@ -338,10 +359,10 @@ def handle_simple_resize():
                     del image_data
                     del resized_image
                     
-                    # Force garbage collection every 10 files to free memory
-                    if (i + 1) % 10 == 0:
+                    # More aggressive garbage collection every 3 files for cloud
+                    if (i + 1) % 3 == 0:
                         gc.collect()
-                        print(f"Memory cleanup after {i + 1} files")
+                        print(f"Aggressive memory cleanup after {i + 1} files")
                     
                 except Exception as e:
                     print(f"Error processing file {file.filename}: {str(e)}")
@@ -387,8 +408,8 @@ def handle_simple_resize():
             error_msg = 'For mange eller for store billeder - prøv med færre billeder eller mindre filstørrelser.'
         elif 'timeout' in str(e).lower():
             error_msg = 'Behandling tog for lang tid - prøv med færre billeder ad gangen.'
-        elif len(files) > 50:
-            error_msg = f'Server fejl med {len(files)} billeder. Prøv at uploade maks 25-50 billeder ad gangen.'
+        elif len(files) > 20:
+            error_msg = f'Server fejl med {len(files)} billeder. På cloud servere: prøv maks 10-15 billeder ad gangen.'
         
         return render_template('resizer.html',
                              current_page='resizer',
