@@ -215,6 +215,7 @@ def create_thumbnail(image_data: bytes, max_size_kb: int = 300) -> bytes:
     output.seek(0)
     return output.getvalue()
 
+
 def resize_image(image_data: bytes, max_size: int = None) -> bytes:
     """ONLY rename/format convert - NO resizing or quality loss for large images"""
     # STORE BILLEDER SKAL IKKE PILLES VED (:
@@ -252,11 +253,100 @@ def get_image_info(image_data: bytes) -> Dict:
 
 @resizer_bp.route("/", methods=["GET", "POST"])
 def view():
-    if request.method == "GET":
-        return render_template('resizer.html', current_page='resizer')
+    tab = request.args.get('tab', 'simple')  # Default til simple resize
     
-    # ærlig talt pas
-    return handle_form_submission()
+    if request.method == "GET":
+        return render_template('resizer.html', 
+                             current_page='resizer',
+                             active_tab=tab)
+    
+    # Handle different tabs
+    if tab == 'simple':
+        return handle_simple_resize()
+    elif tab == 'grouping':
+        return handle_form_submission()  # Existing functionality
+    elif tab == 'individual':
+        return handle_individual_submission(request.files.getlist('images'))
+    else:
+        return handle_form_submission()  # Default fallback
+
+def handle_simple_resize():
+    """Handle simple resize - unlimited files, resize to KB target"""
+    try:
+        files = request.files.getlist('images')
+        if not files or not any(f.filename for f in files):
+            return render_template('resizer.html', 
+                                 current_page='resizer',
+                                 active_tab='simple',
+                                 error='Ingen billeder uploadet')
+        
+        print(f"Simple resize processing {len(files)} files (NO LIMIT)")
+        
+        # Get target size from form (in KB)
+        try:
+            target_size_kb = int(request.form.get('target_size_kb', 300))
+            if target_size_kb < 50 or target_size_kb > 2000:
+                target_size_kb = 300
+        except ValueError:
+            target_size_kb = 300
+        
+        processed_files = []
+        
+        for file in files:
+            if file and file.filename:
+                try:
+                    # Read image data
+                    image_data = file.read()
+                    if len(image_data) == 0:
+                        continue
+                        
+                    # Simple resize to target KB size (keep same filename)
+                    resized_image = create_thumbnail(image_data, target_size_kb)
+                    image_token = _store_image(resized_image)
+                    
+                    # Keep original filename
+                    filename = file.filename
+                    # Ensure .jpg extension
+                    if not filename.lower().endswith(('.jpg', '.jpeg')):
+                        filename = os.path.splitext(filename)[0] + '.jpg'
+                    
+                    processed_files.append({
+                        'token': image_token,
+                        'filename': filename,
+                        'original_name': file.filename
+                    })
+                    
+                except Exception as e:
+                    print(f"Error processing file {file.filename}: {str(e)}")
+                    continue
+        
+        if not processed_files:
+            return render_template('resizer.html',
+                                 current_page='resizer',
+                                 active_tab='simple',
+                                 error='Ingen billeder kunne behandles')
+        
+        # Store processed files for download
+        group_token = _store_group_data({
+            'files': processed_files,
+            'type': 'simple_resize',
+            'settings': {'target_size_kb': target_size_kb}
+        })
+        
+        return render_template('resizer.html',
+                             current_page='resizer',
+                             active_tab='simple',
+                             step='simple_results',
+                             processed_files=processed_files,
+                             group_token=group_token,
+                             target_size_kb=target_size_kb,
+                             total_processed=len(processed_files))
+                             
+    except Exception as e:
+        return render_template('resizer.html',
+                             current_page='resizer',
+                             active_tab='simple',
+                             error=f'Fejl ved simpel resize: {str(e)}')
 
 def handle_form_submission():
     """Handle form submission for processing groups or individual images"""
@@ -266,6 +356,7 @@ def handle_form_submission():
         if not files or not any(f.filename for f in files):
             return render_template('resizer.html', 
                                  current_page='resizer',
+                                 active_tab='grouping',
                                  error='Ingen billeder uploadet')
         
         # Check if this is individual mode
@@ -279,12 +370,14 @@ def handle_form_submission():
             if not groups_data:
                 return render_template('resizer.html', 
                                      current_page='resizer',
+                                     active_tab='grouping',
                                      error='Ingen grupper at behandle')
             return handle_group_submission(files, groups_data)
         
     except Exception as e:
         return render_template('resizer.html', 
                              current_page='resizer',
+                             active_tab='grouping',
                              error=f'Uventet fejl: {str(e)}')
 
 def handle_individual_submission(files):
@@ -320,6 +413,14 @@ def handle_individual_submission(files):
         
         print(f"Individual processing: {len(files)} files, settings: small_max_size_kb={small_max_size_kb}, use_aab_prefix={use_aab_prefix}, auto_organize={auto_organize}")
         
+        # Memory management - limit number of files processed at once
+        max_files = 50  # Reduce from potentially unlimited to prevent server errors
+        if len(files) > max_files:
+            return render_template('resizer.html', 
+                                 current_page='resizer',
+                                 active_tab='individual',
+                                 error=f'For mange billeder! Maks {max_files} billeder ad gangen for at undgå server fejl. Upload færre billeder.')
+        
         # Load uploaded files
         uploaded_files = []
         for i, file in enumerate(files):
@@ -335,11 +436,13 @@ def handle_individual_submission(files):
                     print(f"Error reading file {file.filename}: {str(e)}")
                     return render_template('resizer.html', 
                                          current_page='resizer',
+                                         active_tab='individual',
                                          error=f'Fejl ved læsning af fil {file.filename}: {str(e)}')
         
         if not uploaded_files:
             return render_template('resizer.html', 
                                  current_page='resizer',
+                                 active_tab='individual',
                                  error='Ingen gyldige billedfiler fundet')
         
         # Process individual images
@@ -403,6 +506,7 @@ def handle_individual_submission(files):
         
         return render_template('resizer.html',
                              current_page='resizer',
+                             active_tab='individual',
                              step='results',
                              processed_files=processed_files,
                              group_token=group_token,
@@ -412,6 +516,7 @@ def handle_individual_submission(files):
         print(f"Individual processing error: {str(e)}")
         return render_template('resizer.html', 
                              current_page='resizer',
+                             active_tab='individual',
                              error=f'Fejl ved behandling af individuelle billeder: {str(e)}')
 
 def handle_group_submission(files, groups_data):
@@ -442,6 +547,14 @@ def handle_group_submission(files, groups_data):
         
         print(f"Settings: small_max_size_kb={small_max_size_kb}, use_aab_prefix={use_aab_prefix}, auto_organize={auto_organize}")
         
+        # Memory management - limit number of files processed at once
+        max_files = 50  # Prevent server errors with too many files
+        if len(files) > max_files:
+            return render_template('resizer.html', 
+                                 current_page='resizer',
+                                 active_tab='grouping',
+                                 error=f'For mange billeder! Maks {max_files} billeder ad gangen for at undgå server fejl. Upload færre billeder.')
+        
         # gem lidt data osv
         uploaded_files = []
         for i, file in enumerate(files):
@@ -457,11 +570,13 @@ def handle_group_submission(files, groups_data):
                     print(f"Error reading file {file.filename}: {str(e)}")
                     return render_template('resizer.html', 
                                          current_page='resizer',
+                                         active_tab='grouping',
                                          error=f'Fejl ved læsning af fil {file.filename}: {str(e)}')
         
         if not uploaded_files:
             return render_template('resizer.html', 
                                  current_page='resizer',
+                                 active_tab='grouping',
                                  error='Ingen gyldige billedfiler fundet')
         
         
@@ -535,6 +650,7 @@ def handle_group_submission(files, groups_data):
         # If auto_organize was used, include the organization results for display
         return render_template('resizer.html',
                              current_page='resizer',
+                             active_tab='grouping',
                              step='results',
                              processed_count=len(processed_files),
                              group_token=group_token,
@@ -544,6 +660,7 @@ def handle_group_submission(files, groups_data):
     except Exception as e:
         return render_template('resizer.html',
                              current_page='resizer',
+                             active_tab='grouping',
                              error=f'Fejl ved behandling: {str(e)}')
 
 @resizer_bp.route("/download_zip")
@@ -566,36 +683,46 @@ def download_zip():
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             
-            for file_pair in group_data['files']:
-                filename = file_pair['small']['filename']
-                
-                if create_museum_structure:
-                    # Create museum-style folder structure in ZIP
-                    case_number = extract_case_number(filename)
-                    if case_number:
-                        case_folder = get_case_folder_relative(case_number)
-                        # Only add large images to case folders (like the real system)
+            # Handle different data structures
+            if group_data.get('type') == 'simple_resize':
+                # Simple resize - single files with same names
+                for file_data in group_data['files']:
+                    filename = file_data['filename']
+                    image_data = _pop_image(file_data['token'])
+                    if image_data:
+                        zip_file.writestr(filename, image_data)
+            else:
+                # Regular grouping/individual mode - pairs of small/large
+                for file_pair in group_data['files']:
+                    filename = file_pair['small']['filename']
+                    
+                    if create_museum_structure:
+                        # Create museum-style folder structure in ZIP
+                        case_number = extract_case_number(filename)
+                        if case_number:
+                            case_folder = get_case_folder_relative(case_number)
+                            # Only add large images to case folders (like the real system)
+                            large_data = _pop_image(file_pair['large']['token'])
+                            if large_data:
+                                zip_file.writestr(f"{case_folder}/{filename}", large_data)
+                        
+                        # Also add regular structure for reference
+                        small_data = _pop_image(file_pair['small']['token'])
+                        if small_data:
+                            zip_file.writestr(f"reference/small/{filename}", small_data)
+                        # Large data already used above, get it again if needed
+                        large_data = _IMAGE_STORE.get(file_pair['large']['token'])
+                        if large_data:
+                            zip_file.writestr(f"reference/large/{filename}", large_data)
+                    else:
+                        # Standard flat structure
+                        small_data = _pop_image(file_pair['small']['token'])
+                        if small_data:
+                            zip_file.writestr(f"small/{filename}", small_data)
+                        
                         large_data = _pop_image(file_pair['large']['token'])
                         if large_data:
-                            zip_file.writestr(f"{case_folder}/{filename}", large_data)
-                    
-                    # Also add regular structure for reference
-                    small_data = _pop_image(file_pair['small']['token'])
-                    if small_data:
-                        zip_file.writestr(f"reference/small/{filename}", small_data)
-                    # Large data already used above, get it again if needed
-                    large_data = _IMAGE_STORE.get(file_pair['large']['token'])
-                    if large_data:
-                        zip_file.writestr(f"reference/large/{filename}", large_data)
-                else:
-                    # Standard flat structure
-                    small_data = _pop_image(file_pair['small']['token'])
-                    if small_data:
-                        zip_file.writestr(f"small/{filename}", small_data)
-                    
-                    large_data = _pop_image(file_pair['large']['token'])
-                    if large_data:
-                        zip_file.writestr(f"large/{filename}", large_data)
+                            zip_file.writestr(f"large/{filename}", large_data)
         
         zip_buffer.seek(0)
         

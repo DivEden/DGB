@@ -13,18 +13,60 @@
     {% endif %}
 
     <!-- Tab Navigation -->
-    <div class="tab-navigation">
-        <button class="tab-button active" data-tab="grouping">Gruppering</button>
-        <button class="tab-button" data-tab="individual">Individuelle billeder</button>
+    <div class="tabs">
+        <a href="{{ url_for('resizer.view', tab='simple') }}" 
+           class="tab {% if active_tab == 'simple' %}active{% endif %}">
+           ⚡ Simpel Resize
+        </a>
+        <a href="{{ url_for('resizer.view', tab='grouping') }}" 
+           class="tab {% if active_tab == 'grouping' %}active{% endif %}">
+           📂 Gruppering
+        </a>
+        <a href="{{ url_for('resizer.view', tab='individual') }}" 
+           class="tab {% if active_tab == 'individual' %}active{% endif %}">
+           📄 Individuelle
+        </a>
     </div>
 
     {% if not step %}
     
+    {% if active_tab == 'simple' %}
+    <!-- Simple Resize Tab Content -->
+    <div class="card">
+        <h2>⚡ Simpel Resize</h2>
+        <p class="muted">Upload ubegrænset antal billeder og få dem komprimeret til en bestemt KB størrelse. Behold filnavne.</p>
+        
+        <form method="post" enctype="multipart/form-data" action="{{ url_for('resizer.view', tab='simple') }}">
+            <div class="simple-upload-section">
+                <h3>1. Upload billeder</h3>
+                <div class="upload-area" id="simple-upload-area">
+                    <div class="upload-placeholder">
+                        <p>📁 Træk billeder hertil eller klik for at vælge</p>
+                        <input type="file" id="simple-file-input" name="images" multiple accept="image/*" required>
+                        <button type="button" onclick="document.getElementById('simple-file-input').click()">Vælg billeder</button>
+                    </div>
+                </div>
+                
+                <h3>2. Indstillinger</h3>
+                <div class="simple-settings">
+                    <div class="setting-group">
+                        <label for="target_size_kb">Mål størrelse (KB):</label>
+                        <input type="number" id="target_size_kb" name="target_size_kb" value="300" min="50" max="2000" step="50">
+                        <div class="help-text">Billeder komprimeres til denne filstørrelse i KB</div>
+                    </div>
+                </div>
+                
+                <div class="spacer"></div>
+                <button type="submit" class="process-button">🚀 Resize billeder</button>
+            </div>
+        </form>
+    </div>
+    {% elif active_tab == 'grouping' %}
+    
     <!-- Grouping Tab Content -->
-    <div id="grouping-tab" class="tab-content active">
-        <div class="tab-description">
-            <p class="muted">Upload mange billeder og organiser dem i grupper med automatisk omdøbning og størrelsestilpasning.</p>
-        </div>
+    <div class="tab-description">
+        <p class="muted">Upload mange billeder og organiser dem i grupper med automatisk omdøbning og størrelsestilpasning.</p>
+    </div>
         <div class="main-container">
         <!-- Left side: Upload and image library -->
         <div class="left-panel">
@@ -95,12 +137,12 @@
         </div>
     </div>
     </div>
+    {% elif active_tab == 'individual' %}
     
     <!-- Individual Images Tab Content -->
-    <div id="individual-tab" class="tab-content">
-        <div class="tab-description">
-            <p class="muted">Upload billeder og behandl dem individuelt med tilpassede navne og størrelser.</p>
-        </div>
+    <div class="tab-description">
+        <p class="muted">Upload billeder og behandl dem individuelt med tilpassede navne og størrelser.</p>
+    </div>
         
         <div class="individual-container">
             <div class="card">
@@ -149,10 +191,45 @@
             </div>
         </div>
     </div>
+    {% endif %}
     
     {% endif %}
 
-    {% if step == 'results' %}
+    {% if step == 'simple_results' %}
+    <!-- Simple Resize Results -->
+    <div class="card">
+        <h2>⚡ Simpel Resize Færdig!</h2>
+        <div class="success">
+            {{ total_processed }} billeder blev komprimeret til {{ target_size_kb }}KB.
+        </div>
+        
+        <p>Alle billeder er komprimeret med:</p>
+        <ul>
+            <li><strong>Mål størrelse:</strong> {{ target_size_kb }} KB</li>
+            <li><strong>Kvalitet:</strong> Optimeret JPEG komprimering</li>
+            <li><strong>Filnavne:</strong> Beholdt originale navne</li>
+        </ul>
+        
+        <div class="spacer"></div>
+        <div class="download-options">
+            <h3>📦 Download:</h3>
+            <div class="row">
+                <div class="col">
+                    <a href="{{ url_for('resizer.download_zip', token=group_token) }}" class="button">
+                        ⬇️ Download ZIP
+                    </a>
+                    <div class="download-description">Alle resized billeder i en ZIP fil</div>
+                </div>
+                <div class="col">
+                    <a href="{{ url_for('resizer.view', tab='simple') }}" class="button" style="background: #6c757d;">
+                        🔄 Start forfra
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% elif step == 'results' %}
     <!-- Step 3: Results -->
     <div class="card">
         <h2>✅ Billeder behandlet!</h2>
@@ -241,42 +318,36 @@
 
 
 <style>
-/* Tab Navigation */
-.tab-navigation {
+/* Simple Resize Styling */
+.simple-upload-section {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.simple-settings {
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.simple-settings .setting-group {
     display: flex;
-    border-bottom: 2px solid var(--border);
-    margin-bottom: 24px;
-    gap: 4px;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 300px;
 }
 
-.tab-button {
-    background: none;
-    border: none;
-    padding: 12px 24px;
-    font-size: 16px;
-    cursor: pointer;
-    border-bottom: 3px solid transparent;
-    transition: all 0.3s ease;
-    color: var(--text-muted);
-}
-
-.tab-button:hover {
-    background: var(--hover-bg, #f1f5f9);
+.simple-settings label {
+    font-weight: 600;
     color: var(--text);
 }
 
-.tab-button.active {
-    color: var(--primary);
-    border-bottom-color: var(--primary);
-    font-weight: 600;
-}
-
-.tab-content {
-    display: none;
-}
-
-.tab-content.active {
-    display: block;
+.simple-settings input[type="number"] {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 16px;
 }
 
 .tab-description {
@@ -940,23 +1011,32 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     
-    // Tab functionality
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
+    // Simple resize drag and drop functionality
+    const simpleUploadArea = document.getElementById('simple-upload-area');
+    const simpleFileInput = document.getElementById('simple-file-input');
     
-    tabButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const tabName = this.dataset.tab;
-            
-            // Remove active class from all tabs and contents
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabContents.forEach(content => content.classList.remove('active'));
-            
-            // Add active class to clicked tab and corresponding content
-            this.classList.add('active');
-            document.getElementById(tabName + '-tab').classList.add('active');
+    if (simpleUploadArea && simpleFileInput) {
+        simpleUploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
         });
-    });
+        
+        simpleUploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+        
+        simpleUploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            simpleFileInput.files = files;
+        });
+        
+        simpleUploadArea.addEventListener('click', function() {
+            simpleFileInput.click();
+        });
+    }
     
     // Grouping tab elements
     const fileInput = document.getElementById('file-input');

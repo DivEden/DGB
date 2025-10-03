@@ -1,0 +1,95 @@
+<!-- Manuel Indtastning Tab -->
+<div class="card">
+    <h2>✍️ Manuel Indtastning</h2>
+    <p class="muted">Indtast objektnumre direkte og vælg hvilke felter du vil have hentet fra arkivet.</p>
+
+    {% if not step %}
+    <form method="post" action="{{ url_for('sammenfletter.view', tab='manual') }}">
+        <h3>1) Indtast objektnumre</h3>
+        <label for="object_numbers">Objektnumre (adskil med komma, semikolon eller nye linjer):</label>
+        <textarea id="object_numbers" name="object_numbers" rows="8" placeholder="Fx:&#10;2021.001&#10;2021.002, 2021.003&#10;2021.004; 2021.005" required></textarea>
+        <div class="muted">Du kan indtaste objektnumre på forskellige måder: kommasepareret, semikolonsepareret eller et på hver linje.</div>
+        
+        <div class="spacer"></div>
+        
+        <h3>2) Vælg felter til sammenfletning</h3>
+        <p class="muted">Vælg op til 20 felter du ønsker hentet fra arkivet:</p>
+        
+        <div class="field-selection">
+            {% for field in available_fields %}
+            <div class="field-option">
+                <label>
+                    <input type="checkbox" name="selected_fields" value="{{ field.id }}" />
+                    <strong>{{ field.label }}</strong>
+                    <br><span class="muted">{{ field.description }}</span>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="spacer"></div>
+        <button type="submit">Hent data fra arkivet</button>
+    </form>
+    {% endif %}
+
+    {% if step == 'manual_results' %}
+    <h3>Resultat fra Manuel Indtastning</h3>
+    <div class="success">
+        Hentet data for {{ object_numbers_count }} objektnumre.
+        <br>Valgte felter: {{ selected_fields_labels|join(', ') }}
+        <br>Total records: {{ total_records }}
+    </div>
+    
+    <h4>Resultat (første 20 rækker)</h4>
+    {{ result_preview|safe }}
+
+    <div class="spacer"></div>
+    <div class="row">
+        <div class="col">
+            <a href="{{ url_for('sammenfletter.download', token=file_token) }}" class="button">
+                ⬇️ Download Excel
+            </a>
+        </div>
+        <div class="col">
+            <a href="{{ url_for('sammenfletter.view', tab='manual') }}" class="button" style="background: #6c757d;">
+                🔄 Start forfra
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.field-selection {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.field-option {
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background: #f9f9f9;
+}
+
+.field-option:hover {
+    background: #f0f0f0;
+}
+
+.field-option label {
+    cursor: pointer;
+    display: block;
+}
+
+#object_numbers {
+    width: 100%;
+    min-height: 120px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: monospace;
+    resize: vertical;
+}
+</style>

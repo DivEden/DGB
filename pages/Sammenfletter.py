@@ -1,9 +1,9 @@
 # pages/Sammenfletter.py
 import io
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import pandas as pd
-from flask import Blueprint, render_template, request, send_file, redirect, url_for
+from flask import Blueprint, render_template, request, send_file, redirect, url_for, jsonify
 
 sammenfletter_bp = Blueprint("sammenfletter", __name__)
 
@@ -55,9 +55,25 @@ def _pop_file(token: str) -> Optional[bytes]:
 
 @sammenfletter_bp.route("/", methods=["GET", "POST"])
 def view():
-    if request.method == "GET":
-        return render_template('sammenfletter.html', current_page='sammenfletter')
+    tab = request.args.get('tab', 'excel')  # Standard tab er excel
     
+    if request.method == "GET":
+        return render_template('sammenfletter.html', 
+                             current_page='sammenfletter', 
+                             active_tab=tab)
+    
+    # Handle different tabs
+    if tab == 'excel':
+        return handle_excel_merge()
+    elif tab == 'api':
+        return handle_api_integration()
+    elif tab == 'manual':
+        return handle_manual_input()
+    else:
+        return handle_excel_merge()  # Default fallback
+
+def handle_excel_merge():
+    """Handle the original Excel file merging functionality"""
     # Fil upload og processing
     export_file = request.files.get('export_file')
     other_file = request.files.get('other_file')
@@ -65,6 +81,7 @@ def view():
     if not export_file or not other_file or export_file.filename == '' or other_file.filename == '':
         return render_template('sammenfletter.html', 
                              current_page='sammenfletter',
+                             active_tab='excel',
                              error="Begge filer skal uploades")
     
     # Hent form parameters
@@ -83,6 +100,7 @@ def view():
         if df_export.empty or df_other.empty:
             return render_template('sammenfletter.html',
                                  current_page='sammenfletter',
+                                 active_tab='excel',
                                  error="En eller begge filer er tomme")
         
         # Gætteleg (prøver at finde de rigtige kolonner)
@@ -107,6 +125,7 @@ def view():
         if request.form.get('action') == 'select_columns':
             return render_template('sammenfletter.html',
                                  current_page='sammenfletter',
+                                 active_tab='excel',
                                  step='column_selection',
                                  df_export_preview=df_export.head(5).to_html(classes="table table-striped"),
                                  df_other_preview=df_other.head(5).to_html(classes="table table-striped"),
@@ -181,6 +200,7 @@ def view():
         
         return render_template('sammenfletter.html',
                              current_page='sammenfletter',
+                             active_tab='excel',
                              step='results',
                              result_preview=result.head(20).to_html(classes="table table-striped"),
                              unmatched_preview=result[result["Titel (fra export)"].isna()].head(10).to_html(classes="table table-striped") if unmatched > 0 else "",
@@ -192,7 +212,191 @@ def view():
     except Exception as e:
         return render_template('sammenfletter.html',
                              current_page='sammenfletter',
+                             active_tab='excel',
                              error=f"Fejl ved behandling af filer: {str(e)}")
+
+def handle_api_integration():
+    """Handle API integration with selectable fields"""
+    # Placeholder for future API integration
+    available_fields = [
+        {'id': 'billeder', 'label': 'Billeder', 'description': 'Produktbilleder i høj opløsning'},
+        {'id': 'titel', 'label': 'Titel', 'description': 'Produkttitel og navn'},
+        {'id': 'beskrivelse', 'label': 'Beskrivelse', 'description': 'Detaljeret produktbeskrivelse'},
+        {'id': 'dimensioner', 'label': 'Dimensioner', 'description': 'Størrelse og mål'},
+        {'id': 'materiale', 'label': 'Materiale', 'description': 'Materialetype og sammensætning'},
+        {'id': 'datering', 'label': 'Datering', 'description': 'Tidsperiode og alder'},
+        {'id': 'provenance', 'label': 'Provenance', 'description': 'Oprindelse og historie'},
+        {'id': 'tilstand', 'label': 'Tilstand', 'description': 'Bevaringstilstand'},
+        {'id': 'lokation', 'label': 'Lokation', 'description': 'Nuværende placering'},
+        {'id': 'inventarnummer', 'label': 'Inventarnummer', 'description': 'Internt nummer'},
+    ]
+    
+    if request.method == 'POST':
+        excel_file = request.files.get('excel_file')
+        selected_fields = request.form.getlist('selected_fields')
+        
+        if not excel_file or excel_file.filename == '':
+            return render_template('sammenfletter.html',
+                                 current_page='sammenfletter',
+                                 active_tab='api',
+                                 available_fields=available_fields,
+                                 error="Excel fil skal uploades")
+        
+        if not selected_fields:
+            return render_template('sammenfletter.html',
+                                 current_page='sammenfletter',
+                                 active_tab='api',
+                                 available_fields=available_fields,
+                                 error="Vælg mindst ét felt til sammenfletning")
+        
+        try:
+            # Read Excel file
+            df_input = pd.read_excel(excel_file)
+            
+            # Guess object number column
+            obj_col = guess_key_col(df_input)
+            obj_col = request.form.get('obj_col', obj_col)
+            
+            if obj_col not in df_input.columns:
+                return render_template('sammenfletter.html',
+                                     current_page='sammenfletter',
+                                     active_tab='api',
+                                     available_fields=available_fields,
+                                     error=f"Kolonne '{obj_col}' ikke fundet")
+            
+            # Extract object numbers
+            object_numbers = df_input[obj_col].dropna().astype(str).tolist()
+            
+            # TODO: Replace with actual API call
+            # For now, create mock data
+            api_data = []
+            for obj_num in object_numbers:
+                mock_record = {'objektnummer': obj_num}
+                for field_id in selected_fields:
+                    field_label = next(f['label'] for f in available_fields if f['id'] == field_id)
+                    mock_record[field_label] = f"Mock {field_label} for {obj_num}"
+                api_data.append(mock_record)
+            
+            # Create result DataFrame
+            result_df = pd.DataFrame(api_data)
+            
+            # Store result for download
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                result_df.to_excel(writer, index=False, sheet_name='API_Resultat')
+            buffer.seek(0)
+            
+            file_token = _store_file(buffer.getvalue())
+            
+            return render_template('sammenfletter.html',
+                                 current_page='sammenfletter',
+                                 active_tab='api',
+                                 step='api_results',
+                                 result_preview=result_df.head(20).to_html(classes="table table-striped"),
+                                 total_records=len(result_df),
+                                 selected_fields_labels=[next(f['label'] for f in available_fields if f['id'] == fid) for fid in selected_fields],
+                                 file_token=file_token)
+                                 
+        except Exception as e:
+            return render_template('sammenfletter.html',
+                                 current_page='sammenfletter',
+                                 active_tab='api',
+                                 available_fields=available_fields,
+                                 error=f"Fejl ved behandling: {str(e)}")
+    
+    return render_template('sammenfletter.html',
+                         current_page='sammenfletter',
+                         active_tab='api',
+                         available_fields=available_fields)
+
+def handle_manual_input():
+    """Handle manual object number input without Excel upload"""
+    available_fields = [
+        {'id': 'billeder', 'label': 'Billeder', 'description': 'Produktbilleder i høj opløsning'},
+        {'id': 'titel', 'label': 'Titel', 'description': 'Produkttitel og navn'},
+        {'id': 'beskrivelse', 'label': 'Beskrivelse', 'description': 'Detaljeret produktbeskrivelse'},
+        {'id': 'dimensioner', 'label': 'Dimensioner', 'description': 'Størrelse og mål'},
+        {'id': 'materiale', 'label': 'Materiale', 'description': 'Materialetype og sammensætning'},
+        {'id': 'datering', 'label': 'Datering', 'description': 'Tidsperiode og alder'},
+        {'id': 'provenance', 'label': 'Provenance', 'description': 'Oprindelse og historie'},
+        {'id': 'tilstand', 'label': 'Tilstand', 'description': 'Bevaringstilstand'},
+        {'id': 'lokation', 'label': 'Lokation', 'description': 'Nuværende placering'},
+        {'id': 'inventarnummer', 'label': 'Inventarnummer', 'description': 'Internt nummer'},
+    ]
+    
+    if request.method == 'POST':
+        object_numbers_text = request.form.get('object_numbers', '').strip()
+        selected_fields = request.form.getlist('selected_fields')
+        
+        if not object_numbers_text:
+            return render_template('sammenfletter.html',
+                                 current_page='sammenfletter',
+                                 active_tab='manual',
+                                 available_fields=available_fields,
+                                 error="Indtast mindst ét objektnummer")
+        
+        if not selected_fields:
+            return render_template('sammenfletter.html',
+                                 current_page='sammenfletter',
+                                 active_tab='manual',
+                                 available_fields=available_fields,
+                                 error="Vælg mindst ét felt til sammenfletning")
+        
+        try:
+            # Parse object numbers (support comma, semicolon, newline separation)
+            import re
+            object_numbers = re.split(r'[,;\n]+', object_numbers_text)
+            object_numbers = [num.strip() for num in object_numbers if num.strip()]
+            
+            if not object_numbers:
+                return render_template('sammenfletter.html',
+                                     current_page='sammenfletter',
+                                     active_tab='manual',
+                                     available_fields=available_fields,
+                                     error="Ingen gyldige objektnumre fundet")
+            
+            # TODO: Replace with actual API call
+            # For now, create mock data
+            api_data = []
+            for obj_num in object_numbers:
+                mock_record = {'objektnummer': obj_num}
+                for field_id in selected_fields:
+                    field_label = next(f['label'] for f in available_fields if f['id'] == field_id)
+                    mock_record[field_label] = f"Mock {field_label} for {obj_num}"
+                api_data.append(mock_record)
+            
+            # Create result DataFrame
+            result_df = pd.DataFrame(api_data)
+            
+            # Store result for download
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                result_df.to_excel(writer, index=False, sheet_name='Manual_Resultat')
+            buffer.seek(0)
+            
+            file_token = _store_file(buffer.getvalue())
+            
+            return render_template('sammenfletter.html',
+                                 current_page='sammenfletter',
+                                 active_tab='manual',
+                                 step='manual_results',
+                                 result_preview=result_df.head(20).to_html(classes="table table-striped"),
+                                 total_records=len(result_df),
+                                 selected_fields_labels=[next(f['label'] for f in available_fields if f['id'] == fid) for fid in selected_fields],
+                                 object_numbers_count=len(object_numbers),
+                                 file_token=file_token)
+                                 
+        except Exception as e:
+            return render_template('sammenfletter.html',
+                                 current_page='sammenfletter',
+                                 active_tab='manual',
+                                 available_fields=available_fields,
+                                 error=f"Fejl ved behandling: {str(e)}")
+    
+    return render_template('sammenfletter.html',
+                         current_page='sammenfletter',
+                         active_tab='manual',
+                         available_fields=available_fields)
 
 @sammenfletter_bp.route("/download")
 def download():

@@ -149,17 +149,27 @@
     
     h1,h2,h3 { margin: 0 0 8px 0; }
     
-    .tabs { display:flex; gap:8px; margin-bottom:12px; }
-    .tab a { 
+    .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap: wrap; }
+    .tab { 
       display:inline-block; 
-      padding:8px 12px; 
+      padding:12px 16px; 
       border:1px solid var(--border); 
-      border-radius:999px; 
+      border-radius:8px; 
       text-decoration:none; 
       color:#0f172a; 
       background:#f1f5f9; 
+      font-weight: 500;
+      transition: all 0.2s ease;
     }
-    .tab a.active { background:#e0e7ff; border-color:#c7d2fe; color:#1d4ed8; }
+    .tab:hover {
+      background: #e2e8f0;
+      border-color: #cbd5e1;
+    }
+    .tab.active { 
+      background: var(--accent); 
+      border-color: var(--accent); 
+      color: white; 
+    }
     
     .row { display:flex; gap:16px; flex-wrap: wrap; }
     .col { flex: 1 1 0; min-width: 280px; }

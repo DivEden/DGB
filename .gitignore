@@ -39,3 +39,10 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+
+# Project specific
+feedback.db
+test_museum_folders/
+*.tmp
+*.bak
+sammenfletter_backup.html
