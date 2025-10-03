@@ -4,6 +4,7 @@ import os
 import re
 import zipfile
 import shutil
+import gc
 from typing import Dict, List, Optional, Tuple
 from PIL import Image
 from flask import Blueprint, render_template, request, send_file, jsonify
@@ -271,7 +272,7 @@ def view():
         return handle_form_submission()  # Default fallback
 
 def handle_simple_resize():
-    """Handle simple resize - unlimited files, resize to KB target"""
+    """Handle simple resize - with memory management for large batches"""
     try:
         files = request.files.getlist('images')
         if not files or not any(f.filename for f in files):
@@ -280,7 +281,14 @@ def handle_simple_resize():
                                  active_tab='simple',
                                  error='Ingen billeder uploadet')
         
-        print(f"Simple resize processing {len(files)} files (NO LIMIT)")
+        print(f"Simple resize processing {len(files)} files")
+        
+        # Memory management - warn for very large batches
+        if len(files) > 100:
+            return render_template('resizer.html', 
+                                 current_page='resizer',
+                                 active_tab='simple',
+                                 error=f'For mange billeder på én gang ({len(files)})! Prøv med maks 100 billeder ad gangen for at undgå server fejl.')
         
         # Get target size from form (in KB)
         try:
@@ -292,12 +300,22 @@ def handle_simple_resize():
         
         processed_files = []
         
-        for file in files:
+        # Process files with memory management
+        for i, file in enumerate(files):
             if file and file.filename:
                 try:
+                    print(f"Processing file {i+1}/{len(files)}: {file.filename}")
+                    
                     # Read image data
                     image_data = file.read()
                     if len(image_data) == 0:
+                        print(f"Skipping empty file: {file.filename}")
+                        continue
+                    
+                    # Check file size (warn if very large)
+                    file_size_mb = len(image_data) / (1024 * 1024)
+                    if file_size_mb > 50:  # 50MB limit per file
+                        print(f"Skipping very large file ({file_size_mb:.1f}MB): {file.filename}")
                         continue
                         
                     # Simple resize to target KB size (keep same filename)
@@ -316,15 +334,30 @@ def handle_simple_resize():
                         'original_name': file.filename
                     })
                     
+                    # Clear image data from memory immediately
+                    del image_data
+                    del resized_image
+                    
+                    # Force garbage collection every 10 files to free memory
+                    if (i + 1) % 10 == 0:
+                        gc.collect()
+                        print(f"Memory cleanup after {i + 1} files")
+                    
                 except Exception as e:
                     print(f"Error processing file {file.filename}: {str(e)}")
+                    # Continue processing other files even if one fails
                     continue
+        
+        # Final garbage collection
+        gc.collect()
         
         if not processed_files:
             return render_template('resizer.html',
                                  current_page='resizer',
                                  active_tab='simple',
                                  error='Ingen billeder kunne behandles')
+        
+        print(f"Successfully processed {len(processed_files)} out of {len(files)} files")
         
         # Store processed files for download
         group_token = _store_group_data({
@@ -343,10 +376,24 @@ def handle_simple_resize():
                              total_processed=len(processed_files))
                              
     except Exception as e:
+        print(f"Simple resize error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        # Provide specific error messages based on error type
+        error_msg = f'Fejl ved simpel resize: {str(e)}'
+        
+        if 'memory' in str(e).lower() or 'out of memory' in str(e).lower():
+            error_msg = 'For mange eller for store billeder - prøv med færre billeder eller mindre filstørrelser.'
+        elif 'timeout' in str(e).lower():
+            error_msg = 'Behandling tog for lang tid - prøv med færre billeder ad gangen.'
+        elif len(files) > 50:
+            error_msg = f'Server fejl med {len(files)} billeder. Prøv at uploade maks 25-50 billeder ad gangen.'
+        
         return render_template('resizer.html',
                              current_page='resizer',
                              active_tab='simple',
-                             error=f'Fejl ved simpel resize: {str(e)}')
+                             error=error_msg)
 
 def handle_form_submission():
     """Handle form submission for processing groups or individual images"""
