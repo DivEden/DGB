@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Sammenfletter - DGB Værktøjer{% endblock %}
+
+{% block content %}
+    <h1>🔗 Sammenfletter</h1>
+    <p class="muted">Flet objektnumre med data fra arkivet på forskellige måder.</p>
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+        <a href="{{ url_for('sammenfletter.view', tab='excel') }}" 
+           class="tab {% if active_tab == 'excel' %}active{% endif %}">
+           📊 Excel Sammenfletning
+        </a>
+        <a href="{{ url_for('sammenfletter.view', tab='api') }}" 
+           class="tab {% if active_tab == 'api' %}active{% endif %}">
+           🔌 API Integration
+        </a>
+        <a href="{{ url_for('sammenfletter.view', tab='manual') }}" 
+           class="tab {% if active_tab == 'manual' %}active{% endif %}">
+           ✍️ Manuel Indtastning
+        </a>
+    </div>
+
+    {% if error %}
+    <div class="card">
+        <div class="alert">{{ error }}</div>
+    </div>
+    {% endif %}
+
+    {% if active_tab == 'excel' %}
+        {% include 'sammenfletter_excel.html' %}
+    {% elif active_tab == 'api' %}
+        {% include 'sammenfletter_api.html' %}
+    {% elif active_tab == 'manual' %}
+        {% include 'sammenfletter_manual.html' %}
+    {% endif %}
+
+{% endblock %}

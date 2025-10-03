@@ -1,0 +1,86 @@
+<!-- API Integration Tab -->
+<div class="card">
+    <h2>🔌 API Integration</h2>
+    <p class="muted">Upload en Excel fil med objektnumre og vælg hvilke felter du vil have flettet ind fra arkivet via API.</p>
+    <div class="alert" style="background: #e3f2fd; border-left: 4px solid #2196f3;">
+        <strong>Fremtid:</strong> Denne funktion vil senere kalde direkte til arkivets API i stedet for at bruge Excel filer.
+    </div>
+
+    {% if not step %}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('sammenfletter.view', tab='api') }}">
+        <h3>1) Upload Excel fil med objektnumre</h3>
+        <label for="excel_file">Vælg Excel fil:</label>
+        <input type="file" id="excel_file" name="excel_file" accept=".xlsx,.xls" required />
+        
+        <div class="spacer"></div>
+        
+        <h3>2) Vælg felter til sammenfletning</h3>
+        <p class="muted">Vælg op til 20 felter du ønsker flettet ind fra arkivet:</p>
+        
+        <div class="field-selection">
+            {% for field in available_fields %}
+            <div class="field-option">
+                <label>
+                    <input type="checkbox" name="selected_fields" value="{{ field.id }}" />
+                    <strong>{{ field.label }}</strong>
+                    <br><span class="muted">{{ field.description }}</span>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="spacer"></div>
+        <button type="submit">Kør API sammenfletning</button>
+    </form>
+    {% endif %}
+
+    {% if step == 'api_results' %}
+    <h3>Resultat fra API Integration</h3>
+    <div class="success">
+        Hentet data for {{ total_records }} objektnumre.
+        <br>Valgte felter: {{ selected_fields_labels|join(', ') }}
+    </div>
+    
+    <h4>Resultat (første 20 rækker)</h4>
+    {{ result_preview|safe }}
+
+    <div class="spacer"></div>
+    <div class="row">
+        <div class="col">
+            <a href="{{ url_for('sammenfletter.download', token=file_token) }}" class="button">
+                ⬇️ Download Excel
+            </a>
+        </div>
+        <div class="col">
+            <a href="{{ url_for('sammenfletter.view', tab='api') }}" class="button" style="background: #6c757d;">
+                🔄 Start forfra
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.field-selection {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.field-option {
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background: #f9f9f9;
+}
+
+.field-option:hover {
+    background: #f0f0f0;
+}
+
+.field-option label {
+    cursor: pointer;
+    display: block;
+}
+</style>

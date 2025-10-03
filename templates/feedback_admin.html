@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Feedback Admin{% endblock %}
+
+{% block content %}
+<h1>Feedback Messages</h1>
+
+{% if feedback %}
+  <p>Total messages: {{ feedback|length }}</p>
+  
+  {% for msg in feedback %}
+  <div class="card" style="margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+      <strong>{{ msg.type|title }}</strong>
+      <span class="muted">{{ msg.timestamp }}</span>
+    </div>
+    <p><strong>From:</strong> {{ msg.email }}</p>
+    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid var(--accent);">
+      {{ msg.message }}
+    </div>
+  </div>
+  {% endfor %}
+  
+{% else %}
+  <div class="card">
+    <p>No feedback received yet.</p>
+  </div>
+{% endif %}
+
+<div style="margin-top: 30px;">
+  <a href="/" class="button">Back to Home</a>
+</div>
+{% endblock %}

@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}DGB Værktøjer{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#f8fafc; --panel:#fff; --muted:#475569; --border:#e2e8f0; --accent:#1e4a73;
+      --nav-bg: linear-gradient(135deg, #1e4a73, #2d5a88); --nav-text:#f1f5f9; --nav-hover: rgba(255,255,255,0.1);
+    }
+    * { box-sizing: border-box; }
+    html, body { 
+      background: var(--bg); 
+      color:#0f172a; 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; 
+      margin: 0; 
+      padding: 0;
+    }
+    
+    /* Navigation bar */
+    .navbar {
+      background: var(--nav-bg);
+      padding: 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,.1);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+    }
+    
+    .nav-brand {
+      color: var(--nav-text);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 1.25rem;
+      padding: 16px 0;
+      margin-right: 32px;
+    }
+    
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex: 1;
+    }
+    
+    .nav-link {
+      color: var(--nav-text);
+      text-decoration: none;
+      padding: 16px 20px;
+      transition: background-color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 0;
+    }
+    
+    .nav-link:hover {
+      background: var(--nav-hover);
+    }
+    
+    .nav-link.active {
+      background: var(--accent);
+    }
+    
+    .nav-external {
+      margin-left: auto;
+    }
+    
+    .nav-external .nav-link {
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+      margin-left: 8px;
+    }
+
+    .github-logo {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    /* Hero section */
+    .hero-section {
+      background: var(--nav-bg);
+      color: white;
+      padding: 40px 0;
+      text-align: center;
+      width: 100vw;
+      margin-left: calc(-50vw + 50%);
+      margin-top: -24px;
+      margin-bottom: 30px;
+    }
+
+    .hero-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    .hero-section h1 {
+      font-size: 2.2rem;
+      margin: 0 0 12px 0;
+      font-weight: 600;
+    }
+
+    .hero-section p {
+      font-size: 1.1rem;
+      margin: 0;
+      opacity: 0.85;
+      font-weight: 400;
+    }
+
+    @media (max-width: 768px) {
+      .hero-section {
+        padding: 30px 0;
+      }
+      .hero-section h1 {
+        font-size: 1.8rem;
+      }
+      .hero-section p {
+        font-size: 0.95rem;
+      }
+    }
+    
+    /* Main content. */
+    .wrap { 
+      max-width: 1200px; 
+      margin: 24px auto; 
+      padding: 0 16px; 
+    }
+    
+    .card { 
+      background: var(--panel); 
+      border:1px solid var(--border); 
+      border-radius:12px; 
+      box-shadow: 0 4px 10px rgba(0,0,0,.05); 
+      padding:16px; 
+      margin-bottom:16px; 
+    }
+    
+    h1,h2,h3 { margin: 0 0 8px 0; }
+    
+    .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap: wrap; }
+    .tab { 
+      display:inline-block; 
+      padding:12px 16px; 
+      border:1px solid var(--border); 
+      border-radius:8px; 
+      text-decoration:none; 
+      color:#0f172a; 
+      background:#f1f5f9; 
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .tab:hover {
+      background: #e2e8f0;
+      border-color: #cbd5e1;
+    }
+    .tab.active { 
+      background: var(--accent); 
+      border-color: var(--accent); 
+      color: white; 
+    }
+    
+    .row { display:flex; gap:16px; flex-wrap: wrap; }
+    .col { flex: 1 1 0; min-width: 280px; }
+    
+    textarea, input[type="text"], select, input[type="file"], input[type="number"] { 
+      width:100%; 
+      box-sizing:border-box; 
+      padding:8px; 
+      border:1px solid var(--border); 
+      border-radius:8px; 
+      font: inherit; 
+    }
+    
+    button {
+      background:linear-gradient(#1e4a73,#15395c);
+      color:#fff;
+      border:1px solid #1e4a73;
+      border-radius:10px;
+      padding:8px 12px;
+      cursor:pointer;
+      font-weight:600;
+    }    button.secondary { 
+      background:#f8fafc; 
+      color:#0f172a; 
+      border:1px solid var(--border); 
+    }
+    
+    .button {
+      background:linear-gradient(#1e4a73,#15395c);
+      color:#fff !important;
+      border:1px solid #1e4a73;
+      border-radius:10px;
+      padding:8px 12px;
+      cursor:pointer;
+      font-weight:600;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .button:hover {
+      background:linear-gradient(#15395c,#0f2a47);
+    }    label {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    
+    label input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+    }
+    
+    details {
+      margin: 16px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0;
+    }
+    
+    details summary {
+      padding: 12px;
+      cursor: pointer;
+      background: #f8fafc;
+      border-radius: 8px 8px 0 0;
+      font-weight: 500;
+    }
+    
+    details[open] summary {
+      border-bottom: 1px solid var(--border);
+      border-radius: 8px 8px 0 0;
+    }
+    
+    details > div {
+      padding: 16px;
+    }
+    
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0;
+    }
+    
+    .table th,
+    .table td {
+      border: 1px solid var(--border);
+      padding: 8px;
+      text-align: left;
+    }
+    
+    .table th {
+      background: #f8fafc;
+      font-weight: 600;
+    }
+    
+    .table-striped tbody tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    
+    .muted{ color:#64748b; font-size: 0.95rem; }
+    table { border-collapse: collapse; width:100%; }
+    th, td { border:1px solid var(--border); padding:6px 8px; text-align:left; }
+    .pill { 
+      display:inline-block; 
+      background:#f1f5f9; 
+      border:1px solid var(--border); 
+      border-radius:999px; 
+      padding:3px 8px; 
+      font-size:12px; 
+      color:#475569; 
+    }
+    .spacer{ height:8px; }
+    .alert{ 
+      padding:10px 12px; 
+      background:#fff7ed; 
+      border:1px solid #ffedd5; 
+      color:#9a3412; 
+      border-radius:8px; 
+    }
+    .success{ 
+      padding:10px 12px; 
+      background:#ecfdf5; 
+      border:1px solid #bbf7d0; 
+      color:#065f46; 
+      border-radius:8px; 
+    }
+
+    /* Feedback System */
+    .feedback-bubble {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+    }
+
+    .feedback-btn {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--nav-bg);
+      border: none;
+      color: white;
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(30, 74, 115, 0.3);
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .feedback-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 6px 20px rgba(30, 74, 115, 0.4);
+    }
+
+    .feedback-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 1001;
+    }
+
+    .feedback-content {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      width: 90%;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .feedback-header {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .feedback-header h3 {
+      margin: 0 0 10px 0;
+      color: var(--accent);
+      font-size: 1.5rem;
+    }
+
+    .feedback-header p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .feedback-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .feedback-form select,
+    .feedback-form textarea,
+    .feedback-form input[type="email"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .feedback-form textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .feedback-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    .feedback-close {
+      background: #f8fafc;
+      color: #0f172a;
+      border: 1px solid var(--border);
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .feedback-submit {
+      background: var(--nav-bg);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      .feedback-content {
+        width: 95%;
+        padding: 20px;
+      }
+      .feedback-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 18px;
+      }
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .nav-container {
+        flex-wrap: wrap;
+      }
+      .nav-brand {
+        margin-right: 16px;
+      }
+      .nav-links {
+        flex-wrap: wrap;
+      }
+      .nav-link {
+        padding: 12px 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="/" class="nav-brand">🛠️ DGB Værktøjer</a>
+      
+      <div class="nav-links">
+        <a href="/tekstnormalisering" class="nav-link {{ 'active' if current_page == 'tekstnormalisering' else '' }}">
+          🗂️ Arkivnummer
+        </a>
+        <a href="/resizer" class="nav-link {{ 'active' if current_page == 'resizer' else '' }}">
+          🖼️ Resizer
+        </a>
+        <a href="/sammenfletter" class="nav-link {{ 'active' if current_page == 'sammenfletter' else '' }}">
+          📋 Sammenfletning
+        </a>
+        
+        <div class="nav-external">
+          <a href="https://github.com/DivEden/DGB" target="_blank" class="nav-link">
+            <img src="{{ url_for('static', filename='images/github.logo.png') }}" alt="GitHub" class="github-logo"> GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="wrap">
+    {% block content %}{% endblock %}
+  </div>
+
+  <!-- Feedback System -->
+  <div class="feedback-bubble">
+    <button class="feedback-btn" onclick="openFeedback()">?</button>
+  </div>
+
+  <div class="feedback-modal" id="feedbackModal">
+    <div class="feedback-content">
+      <div class="feedback-header">
+        <h3>Feedback</h3>
+        <p>Report bugs or suggest improvements</p>
+      </div>
+      <form class="feedback-form" action="/feedback" method="POST">
+        <select name="type" required>
+          <option value="">Select type...</option>
+          <option value="bug">Bug Report</option>
+          <option value="feature">Feature Request</option>
+          <option value="improvement">Improvement</option>
+          <option value="other">Other</option>
+        </select>
+        <textarea name="message" placeholder="Describe your feedback..." required></textarea>
+        <input type="email" name="email" placeholder="Your email (optional)">
+        <div class="feedback-actions">
+          <button type="button" class="feedback-close" onclick="closeFeedback()">Cancel</button>
+          <button type="submit" class="feedback-submit">Send</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function openFeedback() {
+      document.getElementById('feedbackModal').style.display = 'block';
+    }
+    
+    function closeFeedback() {
+      document.getElementById('feedbackModal').style.display = 'none';
+    }
+    
+    // Close modal when clicking outside
+    document.getElementById('feedbackModal').onclick = function(e) {
+      if (e.target === this) {
+        closeFeedback();
+      }
+    }
+    
+    // Check for success/error messages
+    window.onload = function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('success') === 'sent') {
+        alert('Thank you for your feedback! It has been sent successfully.');
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (urlParams.get('error')) {
+        const error = urlParams.get('error');
+        if (error === 'missing_fields') {
+          alert('Please fill in all required fields.');
+        } else if (error === 'send_failed') {
+          alert('Sorry, there was an error sending your feedback. Please try again later.');
+        }
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  </script>
+</body>
+</html>

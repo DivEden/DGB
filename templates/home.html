@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Forside - DGB Værktøjer{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+  <div class="hero-container">
+    <h1>DGB Værktøjer</h1>
+    <p>Digitale værktøjer til Den Gamle By</p>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="card">
+      <h2>🗂️ Arkivnummer-normalisering</h2>
+      <p>Normaliser og formatér arkivnumre til standardformat.</p>
+      <ul class="muted">
+        <li>Tekst-input med bulk-behandling</li>
+        <li>Excel upload og download</li>
+        <li>Automatisk formatering (123x456 → 0123x0456)</li>
+      </ul>
+      <a href="/tekstnormalisering"><button>Åbn værktøj</button></a>
+    </div>
+  </div>
+  
+  <div class="col">
+    <div class="card">
+      <h2>🖼️ Billedstørrelse</h2>
+      <p>Tilpas størrelse på billeder til web eller print.</p>
+      <ul class="muted">
+        <li>Batch-behandling</li>
+        <li>Forskellige formater</li>
+        <li>Kvalitetsjustering</li>
+      </ul>
+      <a href="/resizer"><button>Åbn værktøj</button></a>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="card">
+      <h2>📋 Data-sammenfletning</h2>
+      <p>Kombinér data fra forskellige Excel eller CSV-filer.</p>
+      <ul class="muted">
+        <li>Excel/CSV sammenfletning</li>
+        <li>Forskellige join-typer</li>
+        <li>Datavalidering</li>
+      </ul>
+      <a href="/sammenfletter"><button class="secondary">Under udvikling</button></a>
+    </div>
+  </div>
+  
+  <div class="col">
+    <div class="card">
+      <h2>🐙 Kildekode</h2>
+      <p>Se kildekoden og bidrag til projektet på GitHub.</p>
+      <ul class="muted">
+        <li>Open source</li>
+        <li>Python Flask</li>
+        <li>Aktiv udvikling</li>
+      </ul>
+      <a href="https://github.com/DivEden/DGB" target="_blank"><button>Åbn GitHub</button></a>
+    </div>
+  </div>
+</div>
+{% endblock %}

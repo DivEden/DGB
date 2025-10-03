@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Arkivnummer-normalisering - DGB Værktøjer{% endblock %}
+
+{% block content %}
+    <h1>Arkivnummer-normalisering</h1>
+    <p class="muted">Vælg fanen <b>Tekst</b> eller <b>Excel</b> herunder. Regler:
+      <span class="pill">":" → 5 cifre før kolon (bogstaver tæller ikke)</span>
+      <span class="pill">"x/X" → 4 cifre på hver side</span>
+    </p>
+
+    <div class="tabs">
+      <div class="tab"><a href="{{ url_for('tekstnormalisering.view', tab='text') }}" class="{{ 'active' if tab=='text' else '' }}">Tekst</a></div>
+      <div class="tab"><a href="{{ url_for('tekstnormalisering.view', tab='excel') }}" class="{{ 'active' if tab=='excel' else '' }}">Excel</a></div>
+    </div>
+
+    {% if tab == 'text' %}
+    <div class="card">
+      <h2>Tekst</h2>
+      <form method="post" action="{{ url_for('tekstnormalisering.view', tab='text') }}">
+        <div class="row">
+          <div class="col">
+            <label for="inp">Indsæt numre her:</label>
+            <textarea id="inp" name="inp" rows="10" placeholder="Ét pr. linje eller adskilt med mellemrum/komma/semikolon">{{ inp or '' }}</textarea>
+          </div>
+          <div class="col">
+            <div><span class="muted">Tip: Indsæt rå data til venstre og klik <b>Normalisér</b>.</span></div>
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <button type="submit">Normalisér</button>
+      </form>
+    </div>
+
+    {% if tokens is not none %}
+    <div class="card">
+      <h3>Resultat (én pr. linje)</h3>
+      <textarea rows="10" readonly>{{ normalized | join('\n') }}</textarea>
+    </div>
+    <div class="card">
+      <h3>Opslag (før → efter)</h3>
+      <textarea rows="10" readonly>{% for a,b in pairs %}{{ a }} → {{ b }}
+{% endfor %}</textarea>
+    </div>
+    <div class="card">
+      <h3>🔎 SARA-søgning</h3>
+      <textarea rows="4" readonly>{{ sara_query }}</textarea>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if tab == 'excel' %}
+    <div class="card">
+      <h2>Excel</h2>
+      <form method="post" action="{{ url_for('tekstnormalisering.view', tab='excel') }}" enctype="multipart/form-data">
+        <div class="row">
+          <div class="col">
+            <label for="excel">Upload Excel-fil (.xlsx/.xls)</label>
+            <input type="file" id="excel" name="excel" accept=".xlsx,.xls" />
+          </div>
+          <div class="col">
+            <label for="add_mapping">Ekstra "Mapping"-ark (før/efter)?</label>
+            <select id="add_mapping" name="add_mapping">
+              <option value="yes" {% if add_mapping=='yes' %}selected{% endif %}>Ja</option>
+              <option value="no" {% if add_mapping=='no' %}selected{% endif %}>Nej</option>
+            </select>
+          </div>
+        </div>
+        <div class="spacer"></div>
+        <button type="submit">Normalisér Excel</button>
+      </form>
+      <p class="muted">Vi læser første ark og gætter en relevant kolonne (kan ændres i næste trin, hvis nødvendigt).</p>        
+    </div>
+
+    {% if preview is not none %}
+      <div class="card">
+        <h3>Forhåndsvisning (før)</h3>
+        {{ preview|safe }}
+      </div>
+
+      {% if guessed_col %}
+      <div class="card">
+        <div class="success">Foreslået kolonne: <b>{{ guessed_col }}</b></div>
+      </div>
+      {% else %}
+      <div class="card">
+        <div class="alert">Kunne ikke gætte kolonne – vi brugte første kolonne i arket.</div>
+      </div>
+      {% endif %}
+
+      <div class="card">
+        <form method="post" action="{{ url_for('tekstnormalisering.download') }}">
+          <input type="hidden" name="payload_token" value="{{ payload_token }}" />
+          <button type="submit">⬇️ Download opdateret Excel</button>
+        </form>
+        <p class="muted">Den downloadede fil indeholder en ny kolonne med normaliserede værdier{% if add_mapping=='yes' %} og et ekstra "Mapping"-ark{% endif %}.</p>
+      </div>
+    {% endif %}
+    {% endif %}
+
+{% endblock %}

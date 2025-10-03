@@ -1,0 +1,2061 @@
+{% extends "base.html" %}
+
+{% block title %}Billedbehandling - DGB Værktøjer{% endblock %}
+
+{% block content %}
+    <h1>🖼️ Billedbehandling</h1>
+    <p class="muted">Upload billeder og bearbejd dem individuelt eller i grupper.</p>
+
+    {% if error %}
+    <div class="card">
+        <div class="alert">{{ error }}</div>
+    </div>
+    {% endif %}
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+        <a href="{{ url_for('resizer.view', tab='simple') }}" 
+           class="tab {% if active_tab == 'simple' %}active{% endif %}">
+           ⚡ Simpel Resize
+        </a>
+        <a href="{{ url_for('resizer.view', tab='grouping') }}" 
+           class="tab {% if active_tab == 'grouping' %}active{% endif %}">
+           📂 Gruppering
+        </a>
+        <a href="{{ url_for('resizer.view', tab='individual') }}" 
+           class="tab {% if active_tab == 'individual' %}active{% endif %}">
+           📄 Individuelle
+        </a>
+    </div>
+
+    {% if not step %}
+    
+    {% if active_tab == 'simple' %}
+    <!-- Simple Resize Tab Content -->
+    <div class="card">
+        <h2>⚡ Simpel Resize</h2>
+        <p class="muted">Upload ubegrænset antal billeder og få dem komprimeret til en bestemt KB størrelse. Behold filnavne.</p>
+        
+        <form method="post" enctype="multipart/form-data" action="{{ url_for('resizer.view', tab='simple') }}">
+            <div class="simple-upload-section">
+                <h3>1. Upload billeder</h3>
+                <div class="upload-area" id="simple-upload-area">
+                    <div class="upload-placeholder">
+                        <p>📁 Træk billeder hertil eller klik for at vælge</p>
+                        <input type="file" id="simple-file-input" name="images" multiple accept="image/*" required>
+                        <button type="button" onclick="document.getElementById('simple-file-input').click()">Vælg billeder</button>
+                    </div>
+                </div>
+                
+                <h3>2. Indstillinger</h3>
+                <div class="simple-settings">
+                    <div class="setting-group">
+                        <label for="target_size_kb">Mål størrelse (KB):</label>
+                        <input type="number" id="target_size_kb" name="target_size_kb" value="300" min="50" max="2000" step="50">
+                        <div class="help-text">Billeder komprimeres til denne filstørrelse i KB</div>
+                    </div>
+                </div>
+                
+                <div class="spacer"></div>
+                <button type="submit" class="process-button">🚀 Resize billeder</button>
+            </div>
+        </form>
+    </div>
+    {% elif active_tab == 'grouping' %}
+    
+    <!-- Grouping Tab Content -->
+    <div class="tab-description">
+        <p class="muted">Upload mange billeder og organiser dem i grupper med automatisk omdøbning og størrelsestilpasning.</p>
+    </div>
+        <div class="main-container">
+        <!-- Left side: Upload and image library -->
+        <div class="left-panel">
+            <div class="card">
+                <h2>1. Upload billeder</h2>
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-placeholder">
+                        <p>📁 Træk billeder hertil eller klik for at vælge</p>
+                        <input type="file" id="file-input" multiple accept="image/*" style="display: none;">
+                        <button type="button">Vælg billeder</button>
+                    </div>
+                </div>
+                
+                <div id="uploaded-images" class="uploaded-images-section" style="display: none;">
+                    <h3>Billedbibliotek</h3>
+                    <p class="muted">Træk billeder til højre side for at organisere dem i grupper</p>
+                    <div id="image-thumbnails" class="image-thumbnails"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right side: Grouping and settings -->
+        <div class="right-panel">
+            <div class="card" id="grouping-section" style="display: none;">
+                <h2>2. Organiser i grupper</h2>
+                
+                <div class="group-controls">
+                    <button type="button" id="add-group-btn">+ Tilføj ny gruppe</button>
+                    <div id="insert-controls" class="insert-controls" style="display: none;">
+                        <span id="selected-count">0 billeder valgt</span>
+                        <select id="target-group-select">
+                            <option value="">Vælg gruppe...</option>
+                        </select>
+                        <button type="button" id="insert-selected-btn" disabled>Indsæt i gruppe</button>
+                        <button type="button" id="clear-selection-btn">Ryd valg</button>
+                    </div>
+                </div>
+                
+                <div id="groups-container" class="groups-container"></div>
+                
+                <div class="settings-section">
+                    <h3>3. Indstillinger</h3>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label for="small-size">Små billeder (maks):</label>
+                            <input type="number" id="small-size" value="300" min="50" max="1000" step="50"> KB
+                        </div>
+                        <div class="setting-item full-width">
+                            <label>
+                                <input type="checkbox" id="use-aab-prefix" checked> Brug "AAB" prefix
+                            </label>
+                        </div>
+                        <div class="setting-item full-width">
+                            <label>
+                                <input type="checkbox" id="auto-organize"> Automatisk organisering til museumsmapper
+                            </label>
+                            <div class="help-text">
+                                <div>⚠️ Virker kun med filnavne som 0000x0000 format (f.eks. 0217x0054)</div>
+                                <div class="cloud-warning">🌐 Bemærk: På cloud servere vil funktionen vise en fejl - brug download i stedet</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="spacer"></div>
+                <button type="button" id="process-btn" class="process-button" disabled>Behandl billeder</button>
+            </div>
+        </div>
+    </div>
+    </div>
+    {% elif active_tab == 'individual' %}
+    
+    <!-- Individual Images Tab Content -->
+    <div class="tab-description">
+        <p class="muted">Upload billeder og behandl dem individuelt med tilpassede navne og størrelser.</p>
+    </div>
+        
+        <div class="individual-container">
+            <div class="card">
+                <h2>1. Upload billeder</h2>
+                <div class="upload-area" id="individual-upload-area">
+                    <div class="upload-placeholder">
+                        <p>📁 Træk billeder hertil eller klik for at vælge</p>
+                        <input type="file" id="individual-file-input" multiple accept="image/*" style="display: none;">
+                        <button type="button">Vælg billeder</button>
+                    </div>
+                </div>
+                
+                <div id="individual-images" class="individual-images-section" style="display: none;">
+                    <h3>Individuelle billeder</h3>
+                    <p class="muted">Navngiv hvert billede og juster indstillinger</p>
+                    <div id="individual-list" class="individual-list"></div>
+                </div>
+            </div>
+            
+            <div class="card" id="individual-settings" style="display: none;">
+                <h2>2. Indstillinger</h2>
+                
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label for="individual-small-size">Fil størrelse (KB):</label>
+                        <input type="number" id="individual-small-size" value="300" min="50" max="2000">
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="individual-use-aab-prefix">
+                            Tilføj AAB prefix
+                        </label>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="individual-auto-organize">
+                            Auto-organiser til museum mapper
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="spacer"></div>
+                <button type="button" id="individual-process-btn" class="process-button" disabled>Behandl billeder</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% endif %}
+
+    {% if step == 'simple_results' %}
+    <!-- Simple Resize Results -->
+    <div class="card">
+        <h2>⚡ Simpel Resize Færdig!</h2>
+        <div class="success">
+            {{ total_processed }} billeder blev komprimeret til {{ target_size_kb }}KB.
+        </div>
+        
+        <p>Alle billeder er komprimeret med:</p>
+        <ul>
+            <li><strong>Mål størrelse:</strong> {{ target_size_kb }} KB</li>
+            <li><strong>Kvalitet:</strong> Optimeret JPEG komprimering</li>
+            <li><strong>Filnavne:</strong> Beholdt originale navne</li>
+        </ul>
+        
+        <div class="spacer"></div>
+        <div class="download-options">
+            <h3>📦 Download:</h3>
+            <div class="row">
+                <div class="col">
+                    <a href="{{ url_for('resizer.download_zip', token=group_token) }}" class="button">
+                        ⬇️ Download ZIP
+                    </a>
+                    <div class="download-description">Alle resized billeder i en ZIP fil</div>
+                </div>
+                <div class="col">
+                    <a href="{{ url_for('resizer.view', tab='simple') }}" class="button" style="background: #6c757d;">
+                        🔄 Start forfra
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% elif step == 'results' %}
+    <!-- Step 3: Results -->
+    <div class="card">
+        <h2>✅ Billeder behandlet!</h2>
+        <div class="success">
+            {{ processed_count }} billedpar blev behandlet og organiseret.
+        </div>
+        
+        <p>Hver gruppe indeholder:</p>
+        <ul>
+            <li><strong>Små billeder</strong> - Komprimeret til max størrelse (KB-baseret)</li>
+            <li><strong>Store billeder</strong> - Original kvalitet med minimal ændring</li>
+        </ul>
+        
+        <p class="muted"><strong>Bemærk:</strong> Begge versioner har samme filnavn, men er placeret i separate mapper (small/ og large/)</p>
+        
+        {% if auto_organized %}
+        <!-- Auto-organization results -->
+        <div class="organization-results">
+            <h3>🗂️ Automatisk organisering til museumsmapper:</h3>
+            
+            {% if organization_results %}
+                {% if organization_results.success %}
+                <div class="results-section success-section">
+                    <h4>✅ Store billeder gemt i museumsmapper:</h4>
+                    <div class="success-list">
+                        {% for success_msg in organization_results.success %}
+                        <div class="success-item">{{ success_msg }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if organization_results.folders_created %}
+                <div class="results-section">
+                    <h4>📁 Mapper brugt:</h4>
+                    <div class="folder-list">
+                        {% for folder in organization_results.folders_created %}
+                        <div class="folder-item"><code>{{ folder }}</code></div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if organization_results.errors %}
+                <div class="results-section error-section">
+                    <h4>⚠️ Fejl under organisering:</h4>
+                    <div class="error-list">
+                        {% for error_msg in organization_results.errors %}
+                        <div class="error-item">{{ error_msg }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div class="spacer"></div>
+        <div class="download-options">
+            <h3>📦 Download muligheder:</h3>
+            <div class="row">
+                <div class="col">
+                    <a href="{{ url_for('resizer.download_zip', token=group_token) }}" class="button">
+                        📦 Standard Download (ZIP)
+                    </a>
+                    <div class="download-description">Small/ og large/ mapper</div>
+                </div>
+                <div class="col">
+                    <a href="{{ url_for('resizer.download_zip', token=group_token, museum_structure='true') }}" class="button button-museum">
+                        🏛️ Museum Mappestruktur (ZIP)
+                    </a>
+                    <div class="download-description">Organiseret som museumsmapper - klar til M-drev</div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col col-full">
+                    <a href="{{ url_for('resizer.view') }}" class="button" style="background: #6c757d;">
+                        🔄 Start forfra
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+
+
+<style>
+/* Simple Resize Styling */
+.simple-upload-section {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.simple-settings {
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+}
+
+.simple-settings .setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 300px;
+}
+
+.simple-settings label {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.simple-settings input[type="number"] {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 16px;
+}
+
+.tab-description {
+    margin-bottom: 24px;
+}
+
+/* Individual images layout */
+.individual-container {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+}
+
+.individual-list {
+    display: grid;
+    gap: 16px;
+}
+
+.individual-item {
+    display: grid;
+    grid-template-columns: 100px 1fr auto;
+    gap: 16px;
+    padding: 16px;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    align-items: center;
+    background: #f8fafc;
+}
+
+.individual-item img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+}
+
+.individual-item-info {
+    display: grid;
+    gap: 8px;
+}
+
+.individual-item-info label {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.individual-item-info input {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.individual-remove-btn {
+    background: var(--danger, #ef4444);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+}
+
+.individual-remove-btn:hover {
+    background: var(--danger-dark, #dc2626);
+}
+
+.settings-grid {
+    display: grid;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.setting-group label {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.setting-group input[type="number"] {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    max-width: 150px;
+}
+
+.setting-group input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+/* Main layout: 2-column design */
+.main-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.left-panel, .right-panel {
+    min-height: 500px;
+}
+
+/* Upload area styling */
+.upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 30px;
+    text-align: center;
+    background: #f8fafc;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    margin-bottom: 20px;
+}
+
+.upload-area:hover, .upload-area.dragover {
+    border-color: var(--accent);
+    background: #e0e7ff;
+}
+
+.upload-placeholder p {
+    font-size: 1.1rem;
+    color: var(--muted);
+    margin: 0 0 16px 0;
+}
+
+/* Image thumbnails grid - Square images */
+.image-thumbnails {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fefefe;
+    position: relative; /* For selection rectangle */
+    user-select: none; /* Prevent text selection during drag */
+}
+
+/* Make entire uploaded images section selectable */
+.uploaded-images-section {
+    position: relative;
+    user-select: none;
+}
+
+.image-thumb {
+    position: relative;
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: grab;
+    transition: all 0.1s ease; /* Even faster */
+    background: white;
+    aspect-ratio: 1; /* Force square aspect ratio */
+}
+
+.image-thumb:active {
+    cursor: grabbing;
+}
+
+.image-thumb.selected {
+    border-color: #3b82f6;
+    background: #dbeafe;
+    transform: scale(0.95);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.image-thumb.dragging {
+    opacity: 0.8;
+    transform: scale(1.05) rotate(3deg);
+    z-index: 1000;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+    cursor: grabbing !important;
+}
+
+/* Selection rectangle */
+.selection-rectangle {
+    position: absolute;
+    border: 2px dashed #3b82f6;
+    background: rgba(59, 130, 246, 0.15);
+    pointer-events: none;
+    z-index: 999;
+    display: none;
+    border-radius: 4px;
+}
+
+/* Drag preview */
+.drag-preview {
+    position: fixed;
+    pointer-events: none;
+    z-index: 1001;
+    background: white;
+    border: 2px solid #3b82f6;
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+    transform: rotate(5deg);
+    font-size: 0.8rem;
+    color: #1f2937;
+}
+
+.image-thumb:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.image-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Crop to fill square */
+    display: block;
+}
+
+.image-thumb .info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 4px;
+    font-size: 0.7rem;
+    color: white;
+    text-align: center;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+}
+
+.image-thumb .remove-thumb-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.image-thumb .remove-thumb-btn:hover {
+    opacity: 1;
+    background: rgba(239, 68, 68, 1);
+}
+
+/* Groups styling - improved for right panel */
+.group-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.group-controls button {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+}
+
+/* Insert controls */
+.insert-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f3f4f6;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.85rem;
+}
+
+.insert-controls span {
+    color: var(--muted);
+    font-weight: 500;
+}
+
+.insert-controls select {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.insert-controls button {
+    padding: 6px 12px !important;
+    font-size: 0.85rem !important;
+    min-width: auto;
+}
+
+.groups-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.group-item {
+    border: 2px solid #94a3b8;
+    border-radius: 12px;
+    padding: 16px;
+    background: #f8fafc;
+    transition: all 0.3s ease;
+}
+
+.group-item.drag-over {
+    border-color: var(--accent);
+    background: #e0e7ff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+.group-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.group-header input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    background: white;
+}
+
+.group-header input:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.group-header .delete-group {
+    background: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background 0.2s;
+}
+
+.group-header .delete-group:hover {
+    background: #dc2626;
+}
+
+.group-images {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 40px);
+    grid-auto-rows: 40px;
+    gap: 4px;
+    min-height: 50px;
+    border: 2px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 6px;
+    background: white;
+    transition: all 0.3s ease;
+}
+
+.group-images.empty::after {
+    content: "📁 Drop her";
+    color: var(--muted);
+    font-size: 0.7rem;
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 8px;
+    background: #f1f5f9;
+    border-radius: 6px;
+    border: 1px dashed #cbd5e1;
+}
+
+.group-image {
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: white;
+    transition: all 0.3s ease;
+    width: 40px;
+    height: 40px;
+}
+
+.group-image:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.group-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Crop to fill square */
+    display: block;
+}
+
+.group-image .letter-label {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0,0,0,0.8);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: bold;
+    padding: 2px 4px;
+    border-radius: 3px;
+}
+
+.group-image .remove-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Settings section - compact design */
+.settings-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.setting-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.setting-item label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.setting-item input[type="number"] {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 0.9rem;
+}
+
+.process-button {
+    background: linear-gradient(#10b981, #059669);
+    color: white;
+    border: 1px solid #059669;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.process-button:disabled {
+    background: #94a3b8;
+    border-color: #94a3b8;
+    cursor: not-allowed;
+}
+
+.process-button:not(:disabled):hover {
+    background: linear-gradient(#059669, #047857);
+}
+
+/* Dragging states */
+.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+}
+
+.drop-zone-active {
+    border-color: var(--accent) !important;
+    background: #e0e7ff !important;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+    .main-container {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Organization Results Styling */
+.results-section {
+    margin: 16px 0;
+    padding: 16px;
+    border-radius: 8px;
+    background: #f8f9fa;
+}
+
+.results-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.success-list, .folder-list, .error-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    background: white;
+}
+
+.success-item, .folder-item, .error-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.success-item:last-child, .folder-item:last-child, .error-item:last-child {
+    border-bottom: none;
+}
+
+.success-item {
+    color: #155724;
+    background: #d4edda;
+}
+
+.folder-item {
+    color: #0c5460;
+    background: #d1ecf1;
+}
+
+.folder-item code {
+    background: rgba(0,0,0,0.05);
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+}
+
+.error-section {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.error-item {
+    color: #721c24;
+    background: #f8d7da;
+}
+
+/* Help text styling */
+.help-text {
+    font-size: 12px;
+    color: #6c757d;
+    margin-top: 4px;
+    font-style: italic;
+}
+
+/* Organization results in main results page */
+.organization-results {
+    margin: 24px 0;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #28a745;
+}
+
+.organization-results h3 {
+    margin: 0 0 16px 0;
+    color: #155724;
+    font-size: 18px;
+}
+
+.organization-results h4 {
+    margin: 12px 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.success-section {
+    background: #d4edda !important;
+    border: 1px solid #c3e6cb;
+}
+
+.cloud-warning {
+    color: #856404;
+    background: #fff3cd;
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-top: 4px;
+    border-left: 3px solid #ffc107;
+}
+
+/* Download options styling */
+.download-options {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.download-options h3 {
+    margin: 0 0 16px 0;
+    color: #495057;
+}
+
+.button-museum {
+    background: #17a2b8 !important;
+    border-color: #17a2b8 !important;
+}
+
+.button-museum:hover {
+    background: #138496 !important;
+    border-color: #117a8b !important;
+}
+
+.download-description {
+    font-size: 12px;
+    color: #6c757d;
+    margin-top: 4px;
+    text-align: center;
+}
+
+.col-full {
+    width: 100%;
+    text-align: center;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // Simple resize drag and drop functionality
+    const simpleUploadArea = document.getElementById('simple-upload-area');
+    const simpleFileInput = document.getElementById('simple-file-input');
+    
+    if (simpleUploadArea && simpleFileInput) {
+        simpleUploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+        
+        simpleUploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+        
+        simpleUploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            simpleFileInput.files = files;
+        });
+        
+        simpleUploadArea.addEventListener('click', function() {
+            simpleFileInput.click();
+        });
+    }
+    
+    // Grouping tab elements
+    const fileInput = document.getElementById('file-input');
+    const uploadArea = document.getElementById('upload-area');
+    const uploadedImages = document.getElementById('uploaded-images');
+    const imageThumbnails = document.getElementById('image-thumbnails');
+    const groupingSection = document.getElementById('grouping-section');
+    const groupsContainer = document.getElementById('groups-container');
+    const processBtn = document.getElementById('process-btn');
+    
+    let uploadedImageData = [];
+    let groups = [];
+    let draggedElement = null;
+    let selectedImages = new Set(); // Track selected images
+    let isSelecting = false;
+    let selectionStart = { x: 0, y: 0 };
+    let selectionRect = null;
+
+    // Create selection rectangle element
+    function createSelectionRectangle() {
+        const rect = document.createElement('div');
+        rect.className = 'selection-rectangle';
+        uploadedImagesSection.appendChild(rect);
+        return rect;
+    }
+
+    // Multi-select functionality - works on entire uploaded images section
+    const uploadedImagesSection = document.getElementById('uploaded-images');
+    
+    uploadedImagesSection.addEventListener('mousedown', function(e) {
+        if (e.target.closest('.image-thumb')) {
+            const thumb = e.target.closest('.image-thumb');
+            const imageIndex = parseInt(thumb.dataset.imageIndex);
+            
+            if (e.ctrlKey || e.metaKey) {
+                // Toggle selection with Ctrl/Cmd click
+                toggleSelection(thumb, imageIndex);
+            } else if (!selectedImages.has(imageIndex)) {
+                // Clear selection and select this one
+                clearSelection();
+                toggleSelection(thumb, imageIndex);
+            }
+            return;
+        }
+        
+        // Start rectangle selection anywhere in the uploaded images area
+        if (!e.target.closest('button') && !e.target.closest('input')) {
+            startSelection(e);
+        }
+    });
+
+    function startSelection(e) {
+        isSelecting = true;
+        clearSelection();
+        
+        const rect = uploadedImagesSection.getBoundingClientRect();
+        selectionStart.x = e.clientX - rect.left;
+        selectionStart.y = e.clientY - rect.top;
+        
+        if (!selectionRect) {
+            selectionRect = createSelectionRectangle();
+        }
+        
+        selectionRect.style.display = 'block';
+        selectionRect.style.left = selectionStart.x + 'px';
+        selectionRect.style.top = selectionStart.y + 'px';
+        selectionRect.style.width = '0px';
+        selectionRect.style.height = '0px';
+        
+        e.preventDefault();
+    }
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isSelecting || !selectionRect) return;
+        
+        const rect = uploadedImagesSection.getBoundingClientRect();
+        const currentX = e.clientX - rect.left;
+        const currentY = e.clientY - rect.top;
+        
+        const left = Math.min(selectionStart.x, currentX);
+        const top = Math.min(selectionStart.y, currentY);
+        const width = Math.abs(currentX - selectionStart.x);
+        const height = Math.abs(currentY - selectionStart.y);
+        
+        selectionRect.style.left = left + 'px';
+        selectionRect.style.top = top + 'px';
+        selectionRect.style.width = width + 'px';
+        selectionRect.style.height = height + 'px';
+        
+        // Select images within rectangle
+        selectImagesInRectangle(left, top, width, height);
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (isSelecting) {
+            isSelecting = false;
+            if (selectionRect) {
+                selectionRect.style.display = 'none';
+            }
+        }
+    });
+
+    function selectImagesInRectangle(left, top, width, height) {
+        const thumbs = imageThumbnails.querySelectorAll('.image-thumb');
+        
+        thumbs.forEach(thumb => {
+            const thumbRect = thumb.getBoundingClientRect();
+            const containerRect = imageThumbnails.getBoundingClientRect();
+            
+            const thumbLeft = thumbRect.left - containerRect.left + imageThumbnails.scrollLeft;
+            const thumbTop = thumbRect.top - containerRect.top + imageThumbnails.scrollTop;
+            const thumbRight = thumbLeft + thumb.offsetWidth;
+            const thumbBottom = thumbTop + thumb.offsetHeight;
+            
+            const selectionRight = left + width;
+            const selectionBottom = top + height;
+            
+            // Check if rectangles overlap
+            const overlaps = !(thumbRight < left || thumbLeft > selectionRight || 
+                            thumbBottom < top || thumbTop > selectionBottom);
+            
+            const imageIndex = parseInt(thumb.dataset.imageIndex);
+            
+            if (overlaps) {
+                addToSelection(thumb, imageIndex);
+            } else {
+                removeFromSelection(thumb, imageIndex);
+            }
+        });
+    }
+
+    function toggleSelection(thumb, imageIndex) {
+        if (selectedImages.has(imageIndex)) {
+            removeFromSelection(thumb, imageIndex);
+        } else {
+            addToSelection(thumb, imageIndex);
+        }
+    }
+
+    function addToSelection(thumb, imageIndex) {
+        selectedImages.add(imageIndex);
+        thumb.classList.add('selected');
+        updateInsertControls();
+    }
+
+    function removeFromSelection(thumb, imageIndex) {
+        selectedImages.delete(imageIndex);
+        thumb.classList.remove('selected');
+        updateInsertControls();
+    }
+
+    function clearSelection() {
+        selectedImages.clear();
+        document.querySelectorAll('.image-thumb.selected').forEach(thumb => {
+            thumb.classList.remove('selected');
+        });
+        updateInsertControls();
+    }
+
+    // Update insert controls based on selection
+    function updateInsertControls() {
+        const insertControls = document.getElementById('insert-controls');
+        const selectedCount = document.getElementById('selected-count');
+        const insertBtn = document.getElementById('insert-selected-btn');
+        const targetSelect = document.getElementById('target-group-select');
+        
+        if (selectedImages.size > 0) {
+            insertControls.style.display = 'flex';
+            selectedCount.textContent = `${selectedImages.size} billede${selectedImages.size > 1 ? 'r' : ''} valgt`;
+            
+            // Update group select options
+            updateGroupSelect();
+            
+            // Enable insert button if group is selected
+            insertBtn.disabled = !targetSelect.value;
+        } else {
+            insertControls.style.display = 'none';
+        }
+    }
+
+    // Update the group select dropdown
+    function updateGroupSelect() {
+        const targetSelect = document.getElementById('target-group-select');
+        const currentValue = targetSelect.value;
+        
+        // Clear existing options except first
+        targetSelect.innerHTML = '<option value="">Vælg gruppe...</option>';
+        
+        // Add groups
+        groups.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = group.name || 'Unnamed';
+            targetSelect.appendChild(option);
+        });
+        
+        // Restore selection if still valid
+        if (currentValue && groups.find(g => g.id === currentValue)) {
+            targetSelect.value = currentValue;
+        }
+        
+        // Update insert button state
+        const insertBtn = document.getElementById('insert-selected-btn');
+        insertBtn.disabled = !targetSelect.value;
+    }
+
+    // File upload handling
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', handleDragOver);
+    uploadArea.addEventListener('drop', handleDrop);
+    fileInput.addEventListener('change', handleFileSelect);
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    }
+
+    function handleDrop(e) {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = Array.from(e.dataTransfer.files);
+        uploadFiles(files);
+    }
+
+    function handleFileSelect(e) {
+        const files = Array.from(e.target.files);
+        uploadFiles(files);
+    }
+
+    function uploadFiles(files) {
+        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+        if (imageFiles.length === 0) {
+            alert('Kun billedfiler er tilladt');
+            return;
+        }
+
+        // Ingen fil størrelse begrænsning - brugeren kan uploade så store filer som de vil
+        // File size validation removed for unlimited uploads
+
+        // Process each file
+        imageFiles.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // Create a smaller thumbnail for faster performance
+                createThumbnail(e.target.result, 150, 150).then(thumbnailSrc => {
+                    const imageData = {
+                        file: file,
+                        src: e.target.result,  // Keep original for processing
+                        thumbnailSrc: thumbnailSrc,  // Small version for display
+                        name: file.name,
+                        size: file.size
+                    };
+                    uploadedImageData.push(imageData);
+                    displayUploadedImage(imageData, uploadedImageData.length - 1);
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Show uploaded images section
+        uploadedImages.style.display = 'block';
+        groupingSection.style.display = 'block';
+    }
+
+    // Create optimized thumbnail for fast display
+    function createThumbnail(src, maxWidth, maxHeight) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Calculate new dimensions maintaining aspect ratio
+                let { width, height } = img;
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height *= maxWidth / width;
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width *= maxHeight / height;
+                        height = maxHeight;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                // Draw resized image with better quality for clarity
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.85)); // Higher quality for thumbnails
+            };
+            img.src = src;
+        });
+    }
+
+    function displayUploadedImage(imageData, index) {
+        const thumb = document.createElement('div');
+        thumb.className = 'image-thumb';
+        thumb.draggable = true;
+        thumb.dataset.imageIndex = index;
+        
+        thumb.innerHTML = `
+            <img src="${imageData.thumbnailSrc || imageData.src}" alt="${imageData.name}">
+            <div class="info">${imageData.name}</div>
+            <button type="button" class="remove-thumb-btn" onclick="removeUploadedImage(${index})">×</button>
+        `;
+
+        thumb.addEventListener('dragstart', function(e) {
+            const imageIndex = parseInt(this.dataset.imageIndex);
+            
+            // If this image isn't selected, clear selection and select only this one
+            if (!selectedImages.has(imageIndex)) {
+                clearSelection();
+                addToSelection(this, imageIndex);
+            }
+            
+            draggedElement = this;
+            this.classList.add('dragging');
+            
+            // Add dragging class to all selected images for visual feedback
+            document.querySelectorAll('.image-thumb.selected').forEach(t => {
+                t.classList.add('dragging');
+            });
+            
+            // Create drag preview.
+            const selectedCount = selectedImages.size;
+            const dragPreview = document.createElement('div');
+            dragPreview.className = 'drag-preview';
+            dragPreview.textContent = selectedCount > 1 ? `${selectedCount} billeder` : '1 billede';
+            dragPreview.style.left = '-1000px';
+            dragPreview.style.top = '-1000px';
+            document.body.appendChild(dragPreview);
+            
+            // Use the preview as drag image
+            e.dataTransfer.setDragImage(dragPreview, 50, 20);
+            
+            // Clean up preview after drag starts
+            setTimeout(() => {
+                if (document.body.contains(dragPreview)) {
+                    document.body.removeChild(dragPreview);
+                }
+            }, 1);
+            
+            // Store all selected images for drag operation
+            const selectedData = Array.from(selectedImages);
+            e.dataTransfer.setData('application/json', JSON.stringify({
+                type: 'multiple-images',
+                imageIndices: selectedData
+            }));
+            e.dataTransfer.effectAllowed = 'move';
+        });
+
+        thumb.addEventListener('dragend', function() {
+            this.classList.remove('dragging');
+            // Remove dragging class from all selected images
+            document.querySelectorAll('.image-thumb.selected').forEach(t => {
+                t.classList.remove('dragging');
+            });
+            draggedElement = null;
+        });
+
+        imageThumbnails.appendChild(thumb);
+    }
+
+    // Function to remove uploaded image and update all indices
+    window.removeUploadedImage = function(imageIndex) {
+        // Remove from uploaded image data
+        uploadedImageData.splice(imageIndex, 1);
+        
+        // Update all groups to fix their image indices
+        groups.forEach(group => {
+            // Remove any references to the deleted image
+            group.images = group.images.filter(idx => idx !== imageIndex);
+            
+            // Update indices for images that come after the deleted one
+            group.images = group.images.map(idx => idx > imageIndex ? idx - 1 : idx);
+        });
+        
+        // Remove from selection if selected
+        if (selectedImages.has(imageIndex)) {
+            selectedImages.delete(imageIndex);
+        }
+        
+        // Update selection indices for images that come after the deleted one
+        const newSelection = new Set();
+        selectedImages.forEach(idx => {
+            if (idx > imageIndex) {
+                newSelection.add(idx - 1);
+            } else if (idx < imageIndex) {
+                newSelection.add(idx);
+            }
+        });
+        selectedImages = newSelection;
+        
+        // Refresh the entire UI
+        refreshAllThumbnails();
+        refreshAllGroups();
+        updateProcessButton();
+        updateInsertControls();
+    };
+
+    // Function to refresh all thumbnails with correct indices
+    function refreshAllThumbnails() {
+        imageThumbnails.innerHTML = '';
+        
+        uploadedImageData.forEach((imageData, index) => {
+            displayUploadedImage(imageData, index);
+        });
+        
+        // Restore selection
+        selectedImages.forEach(index => {
+            const thumb = document.querySelector(`[data-image-index="${index}"]`);
+            if (thumb) {
+                thumb.classList.add('selected');
+            }
+        });
+    }
+
+    // Function to refresh all groups
+    function refreshAllGroups() {
+        groups.forEach(group => {
+            refreshGroupImages(group);
+        });
+    }
+
+    // Group management - ensure button works after groups are deleted
+    function setupGroupButton() {
+        const addGroupBtn = document.getElementById('add-group-btn');
+        if (addGroupBtn) {
+            console.log('Setting up add group button');
+            // Remove existing listener and add new one to prevent duplicates
+            addGroupBtn.removeEventListener('click', handleAddGroup);
+            addGroupBtn.addEventListener('click', handleAddGroup);
+            // Ensure button is enabled
+            addGroupBtn.disabled = false;
+        } else {
+            console.error('Add group button not found');
+        }
+    }
+    
+    function handleAddGroup() {
+        console.log('Add group button clicked');
+        addGroup();
+    }
+
+    // Setup insert controls
+    function setupInsertControls() {
+        const targetSelect = document.getElementById('target-group-select');
+        const insertBtn = document.getElementById('insert-selected-btn');
+        const clearBtn = document.getElementById('clear-selection-btn');
+
+        if (targetSelect) {
+            targetSelect.addEventListener('change', function() {
+                const insertBtn = document.getElementById('insert-selected-btn');
+                insertBtn.disabled = !this.value || selectedImages.size === 0;
+            });
+        }
+
+        if (insertBtn) {
+            insertBtn.addEventListener('click', function() {
+                const targetGroupId = targetSelect.value;
+                if (targetGroupId && selectedImages.size > 0) {
+                    insertSelectedIntoGroup(targetGroupId);
+                }
+            });
+        }
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function() {
+                clearSelection();
+            });
+        }
+    }
+
+    // Insert selected images into a specific group
+    function insertSelectedIntoGroup(targetGroupId) {
+        const targetGroup = groups.find(g => g.id === targetGroupId);
+        if (!targetGroup) return;
+
+        // Add all selected images to the group
+        const selectedIndices = Array.from(selectedImages);
+        selectedIndices.forEach(imageIndex => {
+            addImageToGroup(targetGroup, imageIndex);
+        });
+
+        // Remove selected images from thumbnails
+        selectedIndices.forEach(imageIndex => {
+            const thumb = document.querySelector(`[data-image-index="${imageIndex}"]`);
+            if (thumb) thumb.remove();
+        });
+
+        // Clear selection and update UI
+        clearSelection();
+        refreshGroupImages(targetGroup);
+        updateProcessButton();
+
+        // Show success message briefly
+        const insertBtn = document.getElementById('insert-selected-btn');
+        const originalText = insertBtn.textContent;
+        insertBtn.textContent = '✓ Indsat!';
+        insertBtn.disabled = true;
+        setTimeout(() => {
+            insertBtn.textContent = originalText;
+        }, 1500);
+    }
+    
+    // Initialize buttons
+    setupGroupButton();
+    setupInsertControls();
+
+    function addGroup(name = '') {
+        console.log('Adding new group, current groups:', groups.length);
+        
+        const groupId = 'group-' + Date.now();
+        const group = {
+            id: groupId,
+            name: name || `Gruppe ${groups.length + 1}`,
+            images: []
+        };
+        groups.push(group);
+
+        const groupElement = createGroupElement(group);
+        const container = document.getElementById('groups-container');
+        if (container) {
+            container.appendChild(groupElement);
+            console.log('Group added successfully:', groupId);
+        } else {
+            console.error('Could not find groups container');
+        }
+        
+        updateProcessButton();
+        updateGroupSelect(); // Update dropdown with new group
+        return groupElement;
+    }
+
+    function createGroupElement(group) {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'group-item';
+        groupDiv.dataset.groupId = group.id;
+        
+        groupDiv.innerHTML = `
+            <div class="group-header">
+                <input type="text" value="${group.name}" placeholder="Gruppenavn (fx: 1234x1234)">
+                <button type="button" class="delete-group">Slet</button>
+            </div>
+            <div class="group-images empty" data-group-id="${group.id}"></div>
+        `;
+
+        // Event listeners
+        const nameInput = groupDiv.querySelector('input');
+        nameInput.addEventListener('input', function() {
+            group.name = this.value;
+            updateProcessButton();
+            updateGroupSelect(); // Update dropdown when group name changes
+        });
+
+        const deleteBtn = groupDiv.querySelector('.delete-group');
+        deleteBtn.addEventListener('click', function() {
+            deleteGroup(group.id);
+        });
+
+        const dropZone = groupDiv.querySelector('.group-images');
+        setupDropZone(dropZone, group);
+
+        return groupDiv;
+    }
+
+    function setupDropZone(dropZone, group) {
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('drop-zone-active');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+            this.classList.remove('drop-zone-active');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('drop-zone-active');
+            
+            // Try to get multiple images data
+            try {
+                const dragData = e.dataTransfer.getData('application/json');
+                if (dragData) {
+                    const data = JSON.parse(dragData);
+                    if (data.type === 'multiple-images' && data.imageIndices) {
+                        // Handle multiple images
+                        data.imageIndices.forEach(imageIndex => {
+                            addImageToGroup(group, imageIndex);
+                        });
+                        
+                        // Remove selected images from thumbnails
+                        data.imageIndices.forEach(imageIndex => {
+                            const thumb = document.querySelector(`[data-image-index="${imageIndex}"]`);
+                            if (thumb) thumb.remove();
+                        });
+                        
+                        clearSelection();
+                        refreshGroupImages(group);
+                        updateProcessButton();
+                        return;
+                    }
+                }
+            } catch (e) {
+                // Fall back to single image handling
+            }
+            
+            // Single image fallback
+            if (draggedElement) {
+                const imageIndex = parseInt(draggedElement.dataset.imageIndex);
+                addImageToGroup(group, imageIndex);
+                draggedElement.remove();
+                refreshGroupImages(group);
+                updateProcessButton();
+            }
+        });
+    }
+
+    function addImageToGroup(group, imageIndex) {
+        // Don't add if already in group
+        if (group.images.includes(imageIndex)) return;
+        
+        const imageData = uploadedImageData[imageIndex];
+        group.images.push(imageIndex);
+        updateProcessButton();
+    }
+
+    window.removeImageFromGroup = function(groupId, imageIndexInGroup) {
+        const group = groups.find(g => g.id === groupId);
+        if (group && imageIndexInGroup < group.images.length) {
+            // Get the image index that we're removing
+            const imageIndex = group.images[imageIndexInGroup];
+            
+            // Remove from group
+            group.images.splice(imageIndexInGroup, 1);
+            
+            // Add the image back to the thumbnail gallery ONLY if it's not already there
+            const existingThumb = document.querySelector(`[data-image-index="${imageIndex}"]`);
+            if (!existingThumb) {
+                const imageData = uploadedImageData[imageIndex];
+                if (imageData) {
+                    displayUploadedImage(imageData, imageIndex);
+                }
+            }
+            
+            refreshGroupImages(group);
+            updateProcessButton();
+        }
+    };
+
+    function refreshGroupImages(group) {
+        const groupImagesDiv = document.querySelector(`[data-group-id="${group.id}"].group-images`);
+        if (!groupImagesDiv) {
+            console.error('Could not find group images div for group:', group.id);
+            return;
+        }
+        
+        groupImagesDiv.innerHTML = '';
+        
+        if (group.images.length === 0) {
+            groupImagesDiv.classList.add('empty');
+        } else {
+            groupImagesDiv.classList.remove('empty');
+            group.images.forEach((imageIndex, i) => {
+                const imageData = uploadedImageData[imageIndex];
+                const imageDiv = document.createElement('div');
+                imageDiv.className = 'group-image';
+                imageDiv.innerHTML = `
+                    <img src="${imageData.thumbnailSrc || imageData.src}" alt="${imageData.name}">
+                    <div class="letter-label">${String.fromCharCode(97 + i)}</div>
+                    <button type="button" class="remove-btn" onclick="removeImageFromGroup('${group.id}', ${i})">×</button>
+                `;
+                groupImagesDiv.appendChild(imageDiv);
+            });
+        }
+    }
+
+    function deleteGroup(groupId) {
+        console.log('Deleting group:', groupId);
+        
+        // Find the group and return its images to the gallery
+        const group = groups.find(g => g.id === groupId);
+        if (group && group.images.length > 0) {
+            // Add all images from this group back to the thumbnail gallery
+            group.images.forEach(imageIndex => {
+                const imageData = uploadedImageData[imageIndex];
+                if (imageData) {
+                    // Check if thumbnail doesn't already exist
+                    const existingThumb = document.querySelector(`[data-image-index="${imageIndex}"]`);
+                    if (!existingThumb) {
+                        displayUploadedImage(imageData, imageIndex);
+                    }
+                }
+            });
+        }
+        
+        // Remove from data structure
+        groups = groups.filter(g => g.id !== groupId);
+        
+        // Find the group-item (parent container) specifically
+        const groupElement = document.querySelector(`.group-item[data-group-id="${groupId}"]`);
+        if (groupElement) {
+            groupElement.remove();
+            console.log('Group element removed successfully');
+        } else {
+            console.error('Could not find group element to delete:', groupId);
+        }
+        
+        updateProcessButton();
+        updateGroupSelect(); // Update dropdown after deleting group
+        // Re-setup the add button to ensure it still works
+        setupGroupButton();
+    }
+
+    function updateProcessButton() {
+        const hasValidGroups = groups.some(g => g.images.length > 0 && g.name.trim() !== '');
+        processBtn.disabled = !hasValidGroups;
+    }
+
+    // Process groups
+    processBtn.addEventListener('click', function() {
+        // Tjek om der er grupper med billeder
+        const groupsWithImages = groups.filter(g => g.images.length > 0);
+        
+        if (groupsWithImages.length === 0) {
+            alert('Tilføj mindst én gruppe med billeder');
+            return;
+        }
+        
+        // Tjek om alle grupper med billeder har navne
+        const unnamedGroups = groupsWithImages.filter(g => !g.name.trim() || g.name.trim() === 'Gruppe' || g.name.trim().toLowerCase() === 'unnamed');
+        
+        if (unnamedGroups.length > 0) {
+            alert('🏷️ Alle grupper skal have navne! Husk at navngive dine grupper før behandling.\n\nKlik på gruppe titlen for at ændre navnet.');
+            return;
+        }
+        
+        const validGroups = groupsWithImages;
+
+        // Prepare form data
+        const formData = new FormData();
+        
+        // Add all uploaded files to FormData
+        uploadedImageData.forEach((imageData, index) => {
+            formData.append('images', imageData.file);
+        });
+        
+        // Prepare groups data with image indices
+        const groupsData = validGroups.map(group => ({
+            name: group.name.trim(),
+            images: group.images  // These are indices into uploadedImageData
+        }));
+
+        formData.append('groups_data', JSON.stringify(groupsData));
+        formData.append('small_max_size', document.getElementById('small-size').value);
+        if (document.getElementById('use-aab-prefix').checked) {
+            formData.append('use_aab_prefix', 'on');
+        }
+        if (document.getElementById('auto-organize').checked) {
+            formData.append('auto_organize', 'on');
+        }
+
+        // Show loading
+        processBtn.textContent = 'Behandler...';
+        processBtn.disabled = true;
+
+        // Submit form
+        fetch('{{ url_for("resizer.view") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.text();
+            } else {
+                return response.text().then(text => {
+                    throw new Error('Server error: ' + text);
+                });
+            }
+        })
+        .then(html => {
+            // Check if response looks like valid HTML
+            if (html.trim().length > 0 && html.includes('<')) {
+                // Replace current page content with response
+                document.body.innerHTML = html;
+                
+                // Re-run any scripts in the new content
+                const scripts = document.querySelectorAll('script');
+                scripts.forEach(script => {
+                    if (script.innerHTML.trim()) {
+                        const newScript = document.createElement('script');
+                        newScript.innerHTML = script.innerHTML;
+                        script.parentNode.replaceChild(newScript, script);
+                    }
+                });
+            } else {
+                throw new Error('Invalid response from server');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            let errorMessage = 'Fejl ved behandling af billeder: ' + error.message;
+            
+            // Simple error handling without file size restrictions
+            if (error.message.includes('timeout')) {
+                errorMessage = 'Behandling timed out. Der er muligvis for mange billeder - prøv igen.';
+            }
+            
+            alert(errorMessage);
+            processBtn.textContent = 'Behandl billeder';
+            updateProcessButton();
+        });
+    });
+    
+    // Individual Images Tab Functionality
+    const individualFileInput = document.getElementById('individual-file-input');
+    const individualUploadArea = document.getElementById('individual-upload-area');
+    const individualImages = document.getElementById('individual-images');
+    const individualList = document.getElementById('individual-list');
+    const individualSettings = document.getElementById('individual-settings');
+    const individualProcessBtn = document.getElementById('individual-process-btn');
+    
+    let individualImageData = [];
+    
+    // Individual upload functionality
+    individualUploadArea.addEventListener('click', () => individualFileInput.click());
+    individualUploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        individualUploadArea.style.borderColor = 'var(--primary)';
+        individualUploadArea.style.background = '#f0f9ff';
+    });
+    
+    individualUploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        individualUploadArea.style.borderColor = 'var(--border)';
+        individualUploadArea.style.background = '#f8fafc';
+    });
+    
+    individualUploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        individualUploadArea.style.borderColor = 'var(--border)';
+        individualUploadArea.style.background = '#f8fafc';
+        handleIndividualFiles(e.dataTransfer.files);
+    });
+    
+    individualFileInput.addEventListener('change', (e) => {
+        handleIndividualFiles(e.target.files);
+    });
+    
+    function handleIndividualFiles(files) {
+        const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+        
+        if (imageFiles.length === 0) {
+            alert('Kun billedfiler er tilladt');
+            return;
+        }
+        
+        // Process each file
+        imageFiles.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const originalName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+                    individualImageData.push({
+                        file: file,
+                        preview: e.target.result,
+                        name: originalName,
+                        width: img.width,
+                        height: img.height
+                    });
+                    updateIndividualDisplay();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    function updateIndividualDisplay() {
+        if (individualImageData.length > 0) {
+            individualImages.style.display = 'block';
+            individualSettings.style.display = 'block';
+            renderIndividualList();
+            updateIndividualProcessButton();
+        } else {
+            individualImages.style.display = 'none';
+            individualSettings.style.display = 'none';
+        }
+    }
+    
+    function renderIndividualList() {
+        individualList.innerHTML = '';
+        
+        individualImageData.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'individual-item';
+            div.innerHTML = `
+                <img src="${item.preview}" alt="Preview">
+                <div class="individual-item-info">
+                    <label>Navn:</label>
+                    <input type="text" value="${item.name}" data-index="${index}" class="individual-name-input">
+                    <small class="muted">${item.width} × ${item.height} px</small>
+                </div>
+                <button type="button" class="individual-remove-btn" data-index="${index}">Fjern</button>
+            `;
+            
+            // Add event listeners
+            const nameInput = div.querySelector('.individual-name-input');
+            nameInput.addEventListener('input', function() {
+                individualImageData[index].name = this.value;
+                updateIndividualProcessButton();
+            });
+            
+            const removeBtn = div.querySelector('.individual-remove-btn');
+            removeBtn.addEventListener('click', function() {
+                individualImageData.splice(index, 1);
+                updateIndividualDisplay();
+            });
+            
+            individualList.appendChild(div);
+        });
+    }
+    
+    function updateIndividualProcessButton() {
+        const hasImages = individualImageData.length > 0;
+        const allNamed = individualImageData.every(item => item.name.trim() !== '');
+        
+        individualProcessBtn.disabled = !hasImages || !allNamed;
+        
+        if (!hasImages) {
+            individualProcessBtn.textContent = 'Behandl billeder';
+        } else if (!allNamed) {
+            individualProcessBtn.textContent = 'Navngiv alle billeder først';
+        } else {
+            individualProcessBtn.textContent = `Behandl ${individualImageData.length} billeder`;
+        }
+    }
+    
+    // Individual processing
+    individualProcessBtn.addEventListener('click', function() {
+        if (individualImageData.length === 0) {
+            alert('Upload billeder først');
+            return;
+        }
+        
+        const unnamedImages = individualImageData.filter(item => !item.name.trim());
+        if (unnamedImages.length > 0) {
+            alert('🏷️ Alle billeder skal have navne før behandling!');
+            return;
+        }
+        
+        individualProcessBtn.textContent = 'Behandler...';
+        individualProcessBtn.disabled = true;
+        
+        // Prepare form data
+        const formData = new FormData();
+        
+        // Add files
+        individualImageData.forEach((item) => {
+            formData.append('images', item.file);
+        });
+        
+        // Add individual mode flag
+        formData.append('individual_mode', 'true');
+        
+        // Prepare individual data
+        const individualData = individualImageData.map((item, index) => ({
+            name: item.name.trim(),
+            index: index
+        }));
+        
+        formData.append('individual_data', JSON.stringify(individualData));
+        formData.append('small_max_size', document.getElementById('individual-small-size').value);
+        if (document.getElementById('individual-use-aab-prefix').checked) {
+            formData.append('use_aab_prefix', 'on');
+        }
+        if (document.getElementById('individual-auto-organize').checked) {
+            formData.append('auto_organize', 'on');
+        }
+        
+        // Submit to server
+        fetch('/resizer', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.text())
+        .then(html => {
+            // Replace page content with response
+            document.body.innerHTML = html;
+            
+            // Re-run any scripts in the new content
+            const scripts = document.querySelectorAll('script');
+            scripts.forEach(script => {
+                if (script.innerHTML.trim()) {
+                    const newScript = document.createElement('script');
+                    newScript.innerHTML = script.innerHTML;
+                    script.parentNode.replaceChild(newScript, script);
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            let errorMessage = 'Fejl ved behandling af billeder: ' + error.message;
+            
+            if (error.message.includes('timeout')) {
+                errorMessage = 'Behandling timed out. Der er muligvis for mange billeder - prøv igen.';
+            }
+            
+            alert(errorMessage);
+            individualProcessBtn.textContent = `Behandl ${individualImageData.length} billeder`;
+            updateIndividualProcessButton();
+        });
+    });
+    
+});
+</script>
+
+{% endblock %}
